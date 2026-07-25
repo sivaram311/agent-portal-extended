@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simple "AP" monogram, teal on transparent, sized for the adaptive-icon
+     safe zone. Placeholder until real product art exists. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#14B8A6"
+        android:pathData="M34,72 L44,36 L54,36 L64,72 L55,72 L53,64 L43,64 L41,72 Z M45,56 L52,56 L48.5,43 Z" />
+    <path
+        android:fillColor="#14B8A6"
+        android:pathData="M70,36 L70,72 L78,72 L78,60 L84,60 C90,60 94,56 94,49 C94,42 90,36 84,36 Z M78,44 L83,44 C86,44 86,52 83,52 L78,52 Z" />
+</vector>

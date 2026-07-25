@@ -1,0 +1,15 @@
+# Android / Gradle
+android/local.properties
+android/.gradle/
+android/**/build/
+android/.idea/
+android/*.iml
+android/captures/
+android/.cxx/
+android/google-services.json
+
+# Session runtime baselines (can contain copies of .env / secrets)
+/.agent-portal/
+
+*.log
+.env

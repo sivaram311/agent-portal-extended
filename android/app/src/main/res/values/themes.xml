@@ -1,0 +1,8 @@
+<resources>
+    <!-- Compose owns theming (see theme/Theme.kt); this is only the pre-Compose
+         window background used during process start / splash. -->
+    <style name="Theme.AgentPortal" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/navy_950</item>
+        <item name="android:statusBarColor">@color/navy_950</item>
+    </style>
+</resources>

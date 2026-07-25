@@ -1,0 +1,6 @@
+<resources>
+    <!-- Mirrors frontend/src/app/theme/tokens.scss (ap-bg token) so the
+         Android app reads as the same product as the web portal, not a copy
+         of any third party's app branding. -->
+    <color name="navy_950">#0F172A</color>
+</resources>

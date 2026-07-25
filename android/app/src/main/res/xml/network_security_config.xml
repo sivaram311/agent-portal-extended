@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HTTPS-only by default. Add a debug-overrides block here (not committed to
+     release) if you need to point a debug build at a plain-HTTP LAN host. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>
