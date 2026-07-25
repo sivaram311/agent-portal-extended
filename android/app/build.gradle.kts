@@ -6,6 +6,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -16,8 +17,8 @@ android {
         applicationId = "buzz.delena.agentportal"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0-auth-push-lock-dev"
+        versionCode = 3
+        versionName = "0.2.1-fcm-android-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Default DEV backend; overridable per build without code changes.

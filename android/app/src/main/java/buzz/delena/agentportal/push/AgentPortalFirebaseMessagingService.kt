@@ -13,28 +13,14 @@ import kotlinx.coroutines.launch
 private const val TAG = "AgentPortalFcmService"
 
 /**
- * Push-notification entry point for FCM. Not yet invoked by the Android
- * system: no Firebase project is provisioned (no google-services.json, and
- * the com.google.gms.google-services Gradle plugin isn't applied), and
- * Firebase's own init sequence gates whether this service class is ever
- * instantiated -- so it is safe to write real logic here now, it simply
- * won't run until that's provisioned. It is deliberately NOT registered in
- * AndroidManifest.xml yet, for the same reason: declaring the standard
- * service and intent-filter block without the plugin present could either
- * be inert or trip manifest-merger issues depending on what the (currently
- * absent) plugin expects to inject.
- *
- * Manifest registration is a one-line addition once Firebase is
- * provisioned: add this inside the application block, as a sibling of the
- * existing MainActivity activity entry.
- *
- * <service
- *     android:name=".push.AgentPortalFirebaseMessagingService"
- *     android:exported="false">
- *     <intent-filter>
- *         <action android:name="com.google.firebase.MESSAGING_EVENT" />
- *     </intent-filter>
- * </service>
+ * Push-notification entry point for FCM. A Firebase project is now
+ * provisioned (google-services.json present, com.google.gms.google-services
+ * plugin applied) and this service is registered in AndroidManifest.xml, so
+ * it is live: onNewToken fires on install/token-rotation and registers with
+ * the backend; onMessageReceived handles data messages while the app process
+ * is alive (system-tray display for messages received while fully backgrounded
+ * with the app killed is handled by Firebase itself for notification-type
+ * payloads, not this method).
  */
 class AgentPortalFirebaseMessagingService : FirebaseMessagingService() {
 

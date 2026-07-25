@@ -18,12 +18,13 @@ Built:
 - Password-lane login, session list, and chat wired end-to-end (ViewModels + nav graph), **verified against a live DEV backend** (login → JWT → authenticated session list/chat, all `200`)
 - Biometric / device-credential app-lock (`AppLockGate`) gating the app when a session is stored — fails open with a visible warning if the device has neither configured
 - Inline notification-action permission approval — Approve/Reject a pending tool-permission request straight from a system notification, works today for foreground/backgrounded-but-alive app process
-- Backend `POST/DELETE /api/devices` device-token registration + `PushNotificationService`, verified end-to-end on DEV (log-only send — no Firebase credentials yet)
+- Backend `POST/DELETE /api/devices` device-token registration + `PushNotificationService`, verified end-to-end on DEV
+- Firebase Cloud Messaging — Android side fully wired (project provisioned, `google-services.json`, registered `AgentPortalFirebaseMessagingService` receiving token refresh + data messages). **Backend send is still log-only** — needs a Firebase Admin SDK service-account key (a separate credential from `google-services.json`) before pushes actually leave the server
 - OAuth/PKCE SSO via Custom Tabs + AppAuth-Android — **built but not functional against the live server yet**, see the caveat below
 
 Not yet done / explicitly deferred (see [ROADMAP.md](ROADMAP.md)):
 
-- Firebase Cloud Messaging itself (the registration/notification plumbing above is ready; no Firebase project/`google-services.json` exists yet)
+- Real FCM sending from the backend (Admin SDK service-account key not yet provisioned)
 - Full per-event-type STOMP realtime parsing (currently a generic refetch-on-any-event)
 - Device Lab E2E on the Realme P2 Pro
 
