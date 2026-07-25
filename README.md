@@ -4,26 +4,32 @@ Native Android client (and future extended-features surface) for **[Agent Portal
 
 This is a **separate repo** from `agent-portal` itself: `https://github.com/sivaram311/agent-portal-extended` (public). It talks to the existing Agent Portal REST/WebSocket API; it does not fork or duplicate the backend.
 
-**Status:** skeleton milestone `v0.1.0-skeleton-dev` (versionCode 1). Builds clean on the host. **Zero device/emulator verification** — no ADB/emulator on this build host (same limitation this machine has repeatedly hit with `E:\MyWorkspace\sandbox\forgecity-launcher`; see [docs/HANDOFF.md](docs/HANDOFF.md) for the disclosure pattern).
+**Status:** `v0.2.0-auth-push-lock-dev` (versionCode 2). Builds clean on the host, backend verified end-to-end against live DEV. **Zero device/emulator verification** — no ADB/emulator on this build host (same limitation this machine has repeatedly hit with `E:\MyWorkspace\sandbox\forgecity-launcher`; see [docs/HANDOFF.md](docs/HANDOFF.md) for the disclosure pattern).
 
 ## Features
 
-Built (this milestone):
+Built:
 
-- Compose UI skeleton — login screen, session list, chat/transcript screen with a Claude-app-like UX, styled in Agent Portal's own **navy/teal** branding (not Anthropic's)
+- Compose UI — login screen, session list, chat/transcript screen with a Claude-app-like UX, styled in Agent Portal's own **navy/teal** branding (not Anthropic's)
 - Retrofit/OkHttp networking layer against the existing Agent Portal REST API
 - Hand-rolled STOMP-over-WebSocket client for realtime session streaming (`/ws/websocket` on the portal backend)
 - Room for local session/message caching
 - EncryptedSharedPreferences for JWT token storage
-- Password-lane login, session list, and chat wired end-to-end (ViewModels + nav graph) against the network/data layer above — **unverified on a physical device**, no ADB on this build host
+- Password-lane login, session list, and chat wired end-to-end (ViewModels + nav graph), **verified against a live DEV backend** (login → JWT → authenticated session list/chat, all `200`)
+- Biometric / device-credential app-lock (`AppLockGate`) gating the app when a session is stored — fails open with a visible warning if the device has neither configured
+- Inline notification-action permission approval — Approve/Reject a pending tool-permission request straight from a system notification, works today for foreground/backgrounded-but-alive app process
+- Backend `POST/DELETE /api/devices` device-token registration + `PushNotificationService`, verified end-to-end on DEV (log-only send — no Firebase credentials yet)
+- OAuth/PKCE SSO via Custom Tabs + AppAuth-Android — **built but not functional against the live server yet**, see the caveat below
 
 Not yet done / explicitly deferred (see [ROADMAP.md](ROADMAP.md)):
 
-- OAuth/PKCE SSO login (password-lane login is wired; SSO is not)
-- Firebase Cloud Messaging push notifications (dependency present, not wired — no Firebase project / `google-services.json` provisioned yet)
-- Biometric app-lock
-- Backend-side `device_tokens` table + push dispatch extension to `WebhookService` (lives in the `agent-portal` repo, not here)
-- Inline notification-action tool-permission-approval flow — the actual "remote session" differentiator
+- Firebase Cloud Messaging itself (the registration/notification plumbing above is ready; no Firebase project/`google-services.json` exists yet)
+- Full per-event-type STOMP realtime parsing (currently a generic refetch-on-any-event)
+- Device Lab E2E on the Realme P2 Pro
+
+## Known blocker: OAuth/PKCE SSO is not live yet
+
+SSO is fully implemented (AppAuth-Android PKCE flow, `AuthViewModel.startSsoLogin`/`completeSsoLogin`), including a fix to the auth server's redirect allow-list (`centralized-security-system`'s `OAuthService.isRedirectUriAllowed`) to accept this app's custom URL scheme. That fix exists only in **local DEV source** — the auth server the app actually talks to (`css-next.delena.buzz`) runs from `G:\apps\css-next\centralized-security-system.jar` (**PROD**, shared with other live apps). Making SSO work end-to-end needs a real Q1/Q2 promote of `centralized-security-system` (evidence pack, EM GO/NO-GO) per this machine's standing orders — not an ad-hoc restart. Password-lane login is unaffected and fully functional.
 
 ## Prerequisites
 

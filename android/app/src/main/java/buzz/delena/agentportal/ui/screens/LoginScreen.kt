@@ -1,5 +1,7 @@
 package buzz.delena.agentportal.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,14 +33,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import buzz.delena.agentportal.AgentPortalApplication
 import buzz.delena.agentportal.theme.AgentPortalTheme
 import buzz.delena.agentportal.theme.ApColors
+import buzz.delena.agentportal.ui.viewmodel.AuthViewModel
 
 /** UI state for [LoginScreen]. Owned by a future AuthViewModel; this file has no ViewModel/network reference. */
 data class LoginUiState(
@@ -54,8 +60,41 @@ fun LoginScreen(
     onUsernameChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onSubmit: () -> Unit,
+    // Optional: NavGraph.kt does not currently pass this (it wires only the
+    // password lane's onSubmit), so this defaults to a no-op and the SSO
+    // token exchange still runs and persists tokens via AuthViewModel either
+    // way -- only the post-login navigation callback is a no-op until a caller
+    // supplies one. See the AuthViewModel obtained below for why this screen
+    // can drive the SSO flow without NavGraph passing it anything new.
+    onSsoSuccess: () -> Unit = {},
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
+
+    // Same ViewModelStoreOwner (the LOGIN NavBackStackEntry) that NavGraph.kt
+    // already requests an AuthViewModel from for the password lane, so this
+    // resolves to the exact same instance and shares state/isLoading/error --
+    // not a second, disconnected ViewModel. Kept self-contained here (rather
+    // than threaded through as a new required LoginScreen parameter) so
+    // nav/NavGraph.kt does not need to change.
+    val context = LocalContext.current
+    val container = (context.applicationContext as AgentPortalApplication).container
+    val authViewModel: AuthViewModel = viewModel(factory = AuthViewModel.Factory(container.authRepository))
+
+    val ssoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        // Best-effort: covers browsers/Custom Tab providers that do return the
+        // redirect through the normal activity-result channel. The
+        // authoritative path for buzz.delena.agentportal://oauth/callback is
+        // the BROWSABLE intent-filter on MainActivity (singleTask), whose
+        // onNewIntent is outside this file's scope -- forwarding that intent
+        // to authViewModel.completeSsoLogin(intent, onSsoSuccess) is required
+        // elsewhere for SSO to complete end to end.
+        val data = result.data
+        if (data != null) {
+            authViewModel.completeSsoLogin(data, onSsoSuccess)
+        }
+    }
 
     Scaffold(containerColor = ApColors.Background) { padding ->
         Box(
@@ -177,8 +216,11 @@ fun LoginScreen(
 
                         TextButton(
                             onClick = {
-                                // TODO: OAuth/PKCE via Custom Tabs -- see docs ROADMAP.md
+                                authViewModel.startSsoLogin(context) { intent ->
+                                    ssoLauncher.launch(intent)
+                                }
                             },
+                            enabled = !state.isLoading,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 6.dp),

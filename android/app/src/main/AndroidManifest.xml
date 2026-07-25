@@ -37,6 +37,13 @@
             </intent-filter>
         </activity>
 
+        <!-- Handles Approve/Reject actions from the permission-approval notification
+             (PermissionApprovalNotifier). Plain local broadcast receiver, no Firebase
+             dependency, safe to register now. -->
+        <receiver
+            android:name=".notifications.PermissionActionReceiver"
+            android:exported="false" />
+
     </application>
 
 </manifest>

@@ -21,6 +21,7 @@ class AppContainer(context: Context) {
     private val agentPortalApi = NetworkModule.provideAgentPortalApi(tokenStore)
     private val authApi = NetworkModule.provideAuthApi()
     private val okHttpClient = NetworkModule.provideOkHttpClient(tokenStore)
+    val deviceApi = NetworkModule.provideDeviceApi(tokenStore)
 
     private val database = AppDatabase.getInstance(context)
 

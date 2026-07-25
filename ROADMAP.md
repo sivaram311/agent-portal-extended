@@ -10,11 +10,11 @@ Prioritized tracks for the native Android client (and future extended-features s
 | P0 | Network/data layer — Retrofit/OkHttp/Room/STOMP | Done |
 | P0 | ViewModels wiring UI to data layer (AuthViewModel, SessionListViewModel, ChatViewModel) + nav graph | Done |
 | P1 | Password-lane login wired end-to-end | Done — code path complete, **unverified on device** (no ADB on build host) |
-| P1 | OAuth/PKCE SSO via Custom Tabs + AppAuth-Android | Backlog — needs css-next redirect allow-list to add the app's custom URL scheme |
+| P1 | OAuth/PKCE SSO via Custom Tabs + AppAuth-Android | Built, **not live** — the `centralized-security-system` redirect-allow-list fix (`OAuthService.isRedirectUriAllowed`) exists only in local DEV source; the auth server the app actually talks to (`css-next.delena.buzz`) runs `G:\apps\css-next\centralized-security-system.jar` (PROD). Needs a real Q1/Q2 promote (evidence pack + EM GO) before SSO can complete against a live server — not an ad-hoc restart, other apps share that instance |
 | P1 | Realtime chat wired to STOMP client | Done (generic refetch-on-event) — full per-event-type parsing of the backend's event schema is still Backlog |
-| P1 | Biometric app-lock + EncryptedSharedPreferences token storage hardening | Backlog |
-| P2 | Firebase Cloud Messaging + backend `device_tokens` table + `WebhookService` push dispatch | Backlog |
-| P2 | Inline notification-action permission approval (the actual remote-session differentiator) | Backlog |
+| P1 | Biometric app-lock + EncryptedSharedPreferences token storage hardening | Done — `AppLockGate` gates the nav host behind `BiometricPrompt`/device-credential when a stored session exists; fails open with a visible warning if the device has neither configured, so it can't hard-lock a user out |
+| P2 | Firebase Cloud Messaging + backend `device_tokens` table + `WebhookService`-sibling push dispatch | Built to the boundary — backend `POST/DELETE /api/devices` + `PushNotificationService` are live and verified end-to-end on DEV (log-only send, no Firebase credentials yet); Android `AgentPortalFirebaseMessagingService` is written but deliberately unregistered in the manifest (no `google-services.json`/Firebase project exists). Wiring in real sending is: add `firebase-admin` to the backend, fill in `PushNotificationService.sendToDevice`'s one `TODO(firebase)`; add the `google-services` Gradle plugin + `google-services.json`, register the one `<service>` block (exact XML left as a comment in the service file) |
+| P2 | Inline notification-action permission approval (the actual remote-session differentiator) | Done for foreground/backgrounded-but-alive app — `PermissionApprovalNotifier` posts an Approve/Reject system notification the moment `ChatViewModel` detects a new pending permission, handled by `PermissionActionReceiver` calling the same `decidePermission` API the in-app card uses. Extending this to work when the app process is fully killed is the Firebase row above, not a separate task |
 | P2 | Device Lab E2E on Realme P2 Pro once a physical device/ADB is available | Blocked — no ADB on build host, same as forgecity-launcher |
 
 ## How to use

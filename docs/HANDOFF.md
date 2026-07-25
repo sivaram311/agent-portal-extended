@@ -9,15 +9,15 @@
 
 | Field | Value |
 |-------|-------|
-| versionName | `0.1.0-skeleton-dev` · versionCode **1** |
-| Latest release | [`v0.1.0-skeleton-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.1.0-skeleton-dev) |
-| APK SHA-256 | `B5AA9F2D96375618386E84E92A3BB4EB78F332A668A9C9D169CA162483315A46` |
-| Prior tip | — (first skeleton ship) |
+| versionName | `0.2.0-auth-push-lock-dev` · versionCode **2** |
+| Latest release | [`v0.2.0-auth-push-lock-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.0-auth-push-lock-dev) |
+| APK SHA-256 | `A29CA32C84F80FD362147420C3CD1EEC95F762B726BA97D5D12B88494D81E5B8` |
+| Prior tip | [`v0.1.0-skeleton-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.1.0-skeleton-dev) |
 
 ## Now → next
 
 | Now | Next |
 |-----|------|
-| Compose UI + network/data skeleton, builds clean, zero device verification | Wire password-lane login end-to-end against DEV `:8080`, then realtime STOMP chat |
+| Biometric lock, notification-action permission approval, and backend device-token push infra all built and verified end-to-end on live DEV (login → JWT → authenticated API calls, `/api/devices` register/unregister). OAuth/PKCE SSO is fully coded but **not functional yet** — its one backend dependency (`centralized-security-system`'s redirect-allowlist fix) exists only in local DEV source; the live auth server runs a separate PROD jar (`G:\apps\css-next\`) that doesn't have it. Zero device/emulator verification (no ADB on this build host). | Promote `centralized-security-system` DEV→PROD (Q1/Q2, evidence + EM GO) to make SSO functional; provision a Firebase project + `google-services.json` to activate push; sideload on the Realme P2 Pro for the first real device pass |
 
 Session: 2026-07-26.

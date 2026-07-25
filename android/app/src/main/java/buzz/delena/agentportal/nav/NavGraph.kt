@@ -1,6 +1,8 @@
 package buzz.delena.agentportal.nav
 
+import android.content.Intent
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
@@ -18,6 +20,8 @@ import buzz.delena.agentportal.ui.screens.SessionListScreen
 import buzz.delena.agentportal.ui.viewmodel.AuthViewModel
 import buzz.delena.agentportal.ui.viewmodel.ChatViewModel
 import buzz.delena.agentportal.ui.viewmodel.SessionListViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Nav graph wired to real screens (ui.screens) via thin ViewModels
@@ -25,7 +29,16 @@ import buzz.delena.agentportal.ui.viewmodel.SessionListViewModel
  * Route names are the contract in Routes.kt.
  */
 @Composable
-fun AgentPortalNavHost(navController: NavHostController = rememberNavController()) {
+fun AgentPortalNavHost(
+    navController: NavHostController = rememberNavController(),
+    // css-next's OAuth redirect (buzz.delena.agentportal://oauth/callback)
+    // lands on MainActivity.onNewIntent, which bridges it in here since the
+    // AuthViewModel that started the flow lives in the LOGIN
+    // NavBackStackEntry's ViewModelStore, not reachable from the Activity
+    // directly. Defaults to an always-empty flow so Previews/tests that
+    // don't care about SSO don't need to supply one.
+    pendingOAuthIntent: StateFlow<Intent?> = MutableStateFlow(null),
+) {
     val container = (LocalContext.current.applicationContext as AgentPortalApplication).container
     val startDestination = if (container.authRepository.isLoggedIn()) Routes.SESSION_LIST else Routes.LOGIN
 
@@ -33,6 +46,19 @@ fun AgentPortalNavHost(navController: NavHostController = rememberNavController(
         composable(Routes.LOGIN) {
             val viewModel: AuthViewModel = viewModel(factory = AuthViewModel.Factory(container.authRepository))
             val state by viewModel.state.collectAsState()
+
+            val oauthIntent by pendingOAuthIntent.collectAsState()
+            LaunchedEffect(oauthIntent) {
+                oauthIntent?.let { intent ->
+                    viewModel.completeSsoLogin(intent) {
+                        navController.navigate(Routes.SESSION_LIST) {
+                            popUpTo(Routes.LOGIN) { inclusive = true }
+                        }
+                    }
+                    (pendingOAuthIntent as? MutableStateFlow)?.value = null
+                }
+            }
+
             LoginScreen(
                 state = state,
                 onUsernameChange = viewModel::onUsernameChange,
@@ -42,6 +68,11 @@ fun AgentPortalNavHost(navController: NavHostController = rememberNavController(
                         navController.navigate(Routes.SESSION_LIST) {
                             popUpTo(Routes.LOGIN) { inclusive = true }
                         }
+                    }
+                },
+                onSsoSuccess = {
+                    navController.navigate(Routes.SESSION_LIST) {
+                        popUpTo(Routes.LOGIN) { inclusive = true }
                     }
                 },
             )
@@ -81,6 +112,7 @@ fun AgentPortalNavHost(navController: NavHostController = rememberNavController(
                     initialTitle = "",
                     sessionRepository = container.sessionRepository,
                     stompClient = container.stompClient,
+                    appContext = LocalContext.current.applicationContext,
                 ),
             )
             val state by viewModel.state.collectAsState()

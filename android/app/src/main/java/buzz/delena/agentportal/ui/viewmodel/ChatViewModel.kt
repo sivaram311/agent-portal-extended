@@ -1,5 +1,6 @@
 package buzz.delena.agentportal.ui.viewmodel
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -8,6 +9,7 @@ import buzz.delena.agentportal.core.data.local.MessageEntity
 import buzz.delena.agentportal.core.network.ConnectionState
 import buzz.delena.agentportal.core.network.StompWebSocketClient
 import buzz.delena.agentportal.core.network.dto.PermissionStatus
+import buzz.delena.agentportal.notifications.PermissionApprovalNotifier
 import buzz.delena.agentportal.ui.screens.ChatMessageItem
 import buzz.delena.agentportal.ui.screens.ChatUiState
 import buzz.delena.agentportal.ui.screens.PendingPermissionItem
@@ -30,6 +32,7 @@ class ChatViewModel(
     initialTitle: String,
     private val sessionRepository: SessionRepository,
     private val stompClient: StompWebSocketClient,
+    private val appContext: Context,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatUiState(sessionTitle = initialTitle))
@@ -83,6 +86,7 @@ class ChatViewModel(
         viewModelScope.launch {
             sessionRepository.decidePermission(sessionId, permissionId, decision, reason = null)
             _state.value = _state.value.copy(pendingPermission = null)
+            PermissionApprovalNotifier.cancelPermissionNotification(appContext, permissionId)
             refresh()
         }
     }
@@ -97,6 +101,7 @@ class ChatViewModel(
     private suspend fun refreshPermissions() {
         sessionRepository.getPendingPermissions(sessionId).onSuccess { permissions ->
             val pending = permissions.firstOrNull { it.status == PermissionStatus.PENDING }
+            val previousId = _state.value.pendingPermission?.id
             _state.value = _state.value.copy(
                 pendingPermission = pending?.let {
                     PendingPermissionItem(
@@ -106,6 +111,18 @@ class ChatViewModel(
                     )
                 },
             )
+            // Only post on a genuinely new pending permission, not every poll
+            // tick that still finds the same one -- avoids re-notifying for
+            // something the user already sees a notification for.
+            if (pending != null && pending.id != previousId) {
+                PermissionApprovalNotifier.postPermissionNotification(
+                    context = appContext,
+                    sessionId = sessionId,
+                    permissionId = pending.id,
+                    toolLabel = pending.kind ?: "Tool permission",
+                    detail = pending.planMarkdown ?: pending.detailsJson,
+                )
+            }
         }
     }
 
@@ -126,10 +143,11 @@ class ChatViewModel(
         private val initialTitle: String,
         private val sessionRepository: SessionRepository,
         private val stompClient: StompWebSocketClient,
+        private val appContext: Context,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return ChatViewModel(sessionId, initialTitle, sessionRepository, stompClient) as T
+            return ChatViewModel(sessionId, initialTitle, sessionRepository, stompClient, appContext) as T
         }
     }
 }

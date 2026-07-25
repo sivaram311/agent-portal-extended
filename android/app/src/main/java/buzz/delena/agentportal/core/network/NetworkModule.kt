@@ -65,14 +65,22 @@ object NetworkModule {
             .build()
     }
 
-    fun provideAgentPortalApi(tokenStore: TokenStore): AgentPortalApi {
+    private fun agentPortalRetrofit(tokenStore: TokenStore): Retrofit {
         val baseUrl = BuildConfig.API_BASE_URL.let { if (it.endsWith("/")) it else "$it/" }
-        val retrofit = Retrofit.Builder()
+        return Retrofit.Builder()
             .baseUrl(baseUrl)
             .client(provideOkHttpClient(tokenStore))
             .addConverterFactory(json.asConverterFactory(jsonMediaType))
             .build()
-        return retrofit.create(AgentPortalApi::class.java)
+    }
+
+    fun provideAgentPortalApi(tokenStore: TokenStore): AgentPortalApi {
+        return agentPortalRetrofit(tokenStore).create(AgentPortalApi::class.java)
+    }
+
+    /** Same backend/auth as AgentPortalApi; kept as a separate Retrofit interface (DeviceApi.kt). */
+    fun provideDeviceApi(tokenStore: TokenStore): DeviceApi {
+        return agentPortalRetrofit(tokenStore).create(DeviceApi::class.java)
     }
 
     /**

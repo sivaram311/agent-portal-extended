@@ -16,13 +16,18 @@ android {
         applicationId = "buzz.delena.agentportal"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-skeleton-dev"
+        versionCode = 2
+        versionName = "0.2.0-auth-push-lock-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Default DEV backend; overridable per build without code changes.
         buildConfigField("String", "API_BASE_URL", "\"https://delena.buzz\"")
         buildConfigField("String", "WS_BASE_URL", "\"wss://delena.buzz\"")
+
+        // AppAuth's own manifest declares a redirect-handling activity behind
+        // this placeholder; must match the custom scheme in AndroidManifest.xml's
+        // OAuth callback intent-filter (buzz.delena.agentportal://oauth/callback).
+        manifestPlaceholders["appAuthRedirectScheme"] = "buzz.delena.agentportal"
     }
 
     buildTypes {
@@ -79,6 +84,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.1")
@@ -116,6 +122,9 @@ dependencies {
     // Push
     implementation(platform("com.google.firebase:firebase-bom:33.13.0"))
     implementation("com.google.firebase:firebase-messaging-ktx")
+
+    // OAuth/PKCE SSO (Custom Tabs + AppAuth)
+    implementation("net.openid:appauth:0.11.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
