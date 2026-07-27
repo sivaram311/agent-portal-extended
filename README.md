@@ -4,7 +4,7 @@ Native Android client (and future extended-features surface) for **[Agent Portal
 
 This is a **separate repo** from `agent-portal` itself: `https://github.com/sivaram311/agent-portal-extended` (public). It talks to the existing Agent Portal REST/WebSocket API; it does not fork or duplicate the backend.
 
-**Status:** `v0.2.4-chat-streaming-dev` (versionCode 6). Builds clean on the host. **First real-device pass completed 2026-07-27** on a Realme P2 Pro — login, session list (real backend data), and the notification permission prompt all confirmed working; that closes this repo's long-standing "zero device verification" gap for the core flow, though chat-screen interaction (keyboard, streaming, biometric re-lock) is not yet re-confirmed against this build specifically.
+**Status:** `v0.2.5-token-refresh-fix-dev` (versionCode 7). Builds clean on the host. Real-device pass on a Realme P2 Pro confirmed login/session list working, then surfaced a real bug — chat prompts stopped working after ~15 minutes with zero error shown. Root cause found and fixed (see below). Chat screen (keyboard/streaming/error banner) not yet re-confirmed on-device against this specific build.
 
 ## Features
 
@@ -18,6 +18,7 @@ Built:
 - Password-lane login, session list, and chat wired end-to-end (ViewModels + nav graph), **verified against a live DEV backend** (login → JWT → authenticated session list/chat, all `200`) **and on a real device**
 - Real per-token chat streaming — `ChatViewModel` parses the backend's actual STOMP event schema (`assistant_delta`/`thinking_delta`, the same source the web frontend's streaming reads) and appends text live, no more waiting for a full response before anything appears
 - Chat input bar keyboard handling (`imePadding()` on the input container) — the input field no longer sits behind the keyboard when typing
+- Access-token refresh (`TokenAuthenticator`) — the real fix for "the app stops responding after a while": tokens expire in 15 minutes and there was no refresh logic at all, plus failures were being silently discarded rather than shown. Refresh verified directly against the live auth server (`POST /auth/refresh` → real `200` + fresh token). Any remaining send/decide-permission failure now shows a dismissible error banner instead of failing invisibly
 - Biometric / device-credential app-lock (`AppLockGate`) gating the app when a session is stored — fails open with a visible warning if the device has neither configured
 - Inline notification-action permission approval — Approve/Reject a pending tool-permission request straight from a system notification, works today for foreground/backgrounded-but-alive app process
 - Backend `POST/DELETE /api/devices` device-token registration + `PushNotificationService`, verified end-to-end on DEV

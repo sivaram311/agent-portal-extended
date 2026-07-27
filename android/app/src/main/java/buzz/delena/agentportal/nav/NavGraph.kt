@@ -122,6 +122,7 @@ fun AgentPortalNavHost(
                 onSendPrompt = viewModel::sendPrompt,
                 onApprovePermission = viewModel::approvePermission,
                 onRejectPermission = viewModel::rejectPermission,
+                onDismissError = viewModel::dismissError,
                 onBack = { navController.popBackStack() },
             )
         }

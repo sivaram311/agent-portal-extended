@@ -62,6 +62,10 @@ data class ChatUiState(
     val promptDraft: String = "",
     val isSending: Boolean = false,
     val pendingPermission: PendingPermissionItem? = null,
+    // A failed sendPrompt/decidePermission used to be entirely silent (the
+    // Result was discarded) -- this surfaces it instead of the send button
+    // just quietly stopping with nothing else happening.
+    val error: String? = null,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,6 +76,7 @@ fun ChatScreen(
     onSendPrompt: () -> Unit,
     onApprovePermission: (String) -> Unit,
     onRejectPermission: (String) -> Unit,
+    onDismissError: () -> Unit,
     onBack: () -> Unit,
 ) {
     val listState = rememberLazyListState()
@@ -118,6 +123,9 @@ fun ChatScreen(
             // the bottom of the screen and the keyboard draws over it instead of
             // pushing it up.
             Column(modifier = Modifier.imePadding()) {
+                if (state.error != null) {
+                    ErrorBanner(message = state.error, onDismiss = onDismissError)
+                }
                 if (state.pendingPermission != null) {
                     PermissionRequestCard(
                         permission = state.pendingPermission,
@@ -149,6 +157,36 @@ fun ChatScreen(
                     timeLabel = message.timeLabel,
                 )
             }
+        }
+    }
+}
+
+/**
+ * Surfaces a failed send/decide-permission call. This used to not exist at
+ * all -- a failure (expired token, network error, backend 500) just made
+ * the send button stop spinning with zero other indication, which read as
+ * "the app isn't responding" with no way to tell why.
+ */
+@Composable
+private fun ErrorBanner(message: String, onDismiss: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = message,
+            color = ApColors.Danger,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(onClick = onDismiss) {
+            Icon(
+                imageVector = Icons.Filled.Warning,
+                contentDescription = "Dismiss error",
+                tint = ApColors.Danger,
+            )
         }
     }
 }
@@ -280,6 +318,7 @@ private fun ChatScreenPreview() {
             onSendPrompt = {},
             onApprovePermission = {},
             onRejectPermission = {},
+            onDismissError = {},
             onBack = {},
         )
     }
@@ -305,6 +344,7 @@ private fun ChatScreenPermissionPreview() {
             onSendPrompt = {},
             onApprovePermission = {},
             onRejectPermission = {},
+            onDismissError = {},
             onBack = {},
         )
     }

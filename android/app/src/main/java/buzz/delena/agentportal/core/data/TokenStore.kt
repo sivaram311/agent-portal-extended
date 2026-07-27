@@ -41,6 +41,24 @@ class TokenStore(context: Context) {
         editor.apply()
     }
 
+    // Cached alongside the tokens so a background token-refresh (which has no
+    // Activity/ViewModel context to re-fetch /api/auth/config from) knows
+    // where to POST the refresh request. Saved every time getAuthConfig()
+    // succeeds (see AuthRepository), not just at login, so it stays current.
+    fun saveAuthServer(authUrl: String, refreshPath: String, clientId: String) {
+        prefs.edit()
+            .putString(KEY_AUTH_URL, authUrl)
+            .putString(KEY_REFRESH_PATH, refreshPath)
+            .putString(KEY_CLIENT_ID, clientId)
+            .apply()
+    }
+
+    fun getAuthUrl(): String? = prefs.getString(KEY_AUTH_URL, null)
+
+    fun getRefreshPath(): String? = prefs.getString(KEY_REFRESH_PATH, null)
+
+    fun getClientId(): String? = prefs.getString(KEY_CLIENT_ID, null)
+
     fun clear() {
         prefs.edit().clear().apply()
     }
@@ -49,5 +67,8 @@ class TokenStore(context: Context) {
         const val PREFS_FILE_NAME = "agent_portal_token_store"
         const val KEY_ACCESS_TOKEN = "access_token"
         const val KEY_REFRESH_TOKEN = "refresh_token"
+        const val KEY_AUTH_URL = "auth_url"
+        const val KEY_REFRESH_PATH = "refresh_path"
+        const val KEY_CLIENT_ID = "client_id"
     }
 }

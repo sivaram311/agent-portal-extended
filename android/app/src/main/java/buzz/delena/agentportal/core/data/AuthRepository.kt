@@ -27,7 +27,13 @@ class AuthRepository(
 
     suspend fun getAuthConfig(): Result<AuthConfigDto> {
         return try {
-            Result.success(agentPortalApi.getAuthConfig())
+            val config = agentPortalApi.getAuthConfig()
+            // Cached so TokenAuthenticator (no Activity/ViewModel context) knows
+            // where to POST a token refresh later, without re-fetching this.
+            if (config.authUrl != null && config.clientId != null) {
+                tokenStore.saveAuthServer(config.authUrl, config.refreshPath, config.clientId)
+            }
+            Result.success(config)
         } catch (t: Throwable) {
             Result.failure(t)
         }
@@ -44,7 +50,9 @@ class AuthRepository(
 
     suspend fun loginWithPassword(username: String, password: String): Result<Unit> {
         return try {
-            val authConfig = agentPortalApi.getAuthConfig()
+            // getAuthConfig() (not the raw api call) so the auth-server config
+            // gets cached for TokenAuthenticator the same way SSO login already does.
+            val authConfig = getAuthConfig().getOrThrow()
             val authUrl = authConfig.authUrl
                 ?: return Result.failure(IllegalStateException("Auth server URL is not configured"))
             val loginUrl = authUrl.trimEnd('/') + authConfig.loginPath

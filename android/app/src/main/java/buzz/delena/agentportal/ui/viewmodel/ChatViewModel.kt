@@ -151,12 +151,28 @@ class ChatViewModel(
         val prompt = _state.value.promptDraft
         if (prompt.isBlank() || _state.value.isSending) return
 
-        _state.value = _state.value.copy(isSending = true, promptDraft = "")
+        // Restore the draft on failure -- previously this was cleared
+        // unconditionally, so a failed send silently discarded what the
+        // user typed with no way to recover it.
+        _state.value = _state.value.copy(isSending = true, promptDraft = "", error = null)
         viewModelScope.launch {
             sessionRepository.sendPrompt(sessionId, prompt)
-            _state.value = _state.value.copy(isSending = false)
-            refreshPermissions()
+                .onSuccess {
+                    _state.value = _state.value.copy(isSending = false)
+                    refreshPermissions()
+                }
+                .onFailure { t ->
+                    _state.value = _state.value.copy(
+                        isSending = false,
+                        promptDraft = prompt,
+                        error = errorMessage(t),
+                    )
+                }
         }
+    }
+
+    fun dismissError() {
+        _state.value = _state.value.copy(error = null)
     }
 
     fun approvePermission(permissionId: String) {
@@ -170,9 +186,26 @@ class ChatViewModel(
     private fun decidePermission(permissionId: String, decision: String) {
         viewModelScope.launch {
             sessionRepository.decidePermission(sessionId, permissionId, decision, reason = null)
-            _state.value = _state.value.copy(pendingPermission = null)
-            PermissionApprovalNotifier.cancelPermissionNotification(appContext, permissionId)
-            refresh()
+                .onSuccess {
+                    _state.value = _state.value.copy(pendingPermission = null, error = null)
+                    PermissionApprovalNotifier.cancelPermissionNotification(appContext, permissionId)
+                    refresh()
+                }
+                .onFailure { t ->
+                    // Deliberately keep pendingPermission as-is on failure --
+                    // the card stays visible so the user can retry, rather
+                    // than silently vanishing as if it had been resolved.
+                    _state.value = _state.value.copy(error = errorMessage(t))
+                }
+        }
+    }
+
+    private fun errorMessage(t: Throwable): String {
+        val httpCode = (t as? retrofit2.HttpException)?.code()
+        return when {
+            httpCode == 401 -> "Your session expired and couldn't be refreshed — please sign in again."
+            httpCode != null -> "Server error ($httpCode). Please try again."
+            else -> t.message?.takeIf { it.isNotBlank() } ?: "Couldn't reach the server. Check your connection and try again."
         }
     }
 

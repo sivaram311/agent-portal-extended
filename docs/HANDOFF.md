@@ -9,19 +9,21 @@
 
 | Field | Value |
 |-------|-------|
-| versionName | `0.2.4-chat-streaming-dev` · versionCode **6** |
-| Latest release | [`v0.2.4-chat-streaming-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.4-chat-streaming-dev) |
-| APK SHA-256 | `EC440B7D1E537355421CA1DA8161BCD8966F0F23EB44E2ADACDA33CFD1B9EDE9` |
-| Prior tip | [`v0.2.3-docs-hotfix-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.3-docs-hotfix-dev) |
+| versionName | `0.2.5-token-refresh-fix-dev` · versionCode **7** |
+| Latest release | TBD — filled in after release |
+| APK SHA-256 | `85447E0339B099014AB439BED4DE49BF6E50E325996AD2B4D4D0952346768A71` |
+| Prior tip | [`v0.2.4-chat-streaming-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.4-chat-streaming-dev) |
 
-## Device testing (new as of 2026-07-27)
+## Device testing log
 
-First-ever real device pass, Realme P2 Pro (via `v0.2.3-docs-hotfix-dev`): app launched, notification permission prompt appeared and was granted, password-lane login succeeded, session list rendered the real backend data (2 IDLE + 1 CANCELLED session) correctly. Chat screen, biometric re-lock on background/foreground, and the new streaming/keyboard fixes below have not yet been re-confirmed on-device against this specific build.
+- **2026-07-27, `v0.2.3`**: first real device pass (Realme P2 Pro) — launch, notification permission grant, password login, session list (real backend data) all confirmed working.
+- **2026-07-27, `v0.2.4` in the field**: user reported "not responding" / "text not binding" after actually using chat for a while. Diagnosed via the backend API directly (not guesswork) — confirmed real prompt/response pairs existed server-side that the app never displayed, and confirmed no new prompts were reaching the server at all for the failing case. Root cause: access tokens expire in 15 minutes, there was no refresh logic anywhere, and `ChatViewModel.sendPrompt()`/`decidePermission()` discarded their `Result` entirely — any failure, expired token or otherwise, failed with zero visible indication.
+- Fix (`v0.2.5`) not yet re-tested on the device — the failure took ~15+ minutes of real usage to reproduce last time, so it needs another extended real-usage session to confirm, not just a fresh install.
 
 ## Now → next
 
 | Now | Next |
 |-----|------|
-| Two real bugs found and fixed, both surfaced by a user bug report (written in Flutter terms against a Kotlin/Compose app — translated the underlying issues, verified which applied here before fixing): (1) chat input bar had no `imePadding()`, so the keyboard could cover the text field on newer Android with edge-to-edge enabled; (2) `ChatViewModel` was doing generic "refetch on any STOMP event" instead of parsing the backend's real per-token streaming events (`assistant_delta`/`thinking_delta`) — now appends live text as it streams, same source the web frontend already uses. Neither fix has been device-verified yet. | Sideload `v0.2.4` on the Realme P2 Pro and actually type in the chat input with the keyboard open, and send a prompt to watch text stream in live — first real confirmation either fix works as intended |
+| `TokenAuthenticator` (OkHttp `Authenticator`) refreshes the access token on a 401 via `POST {authUrl}/auth/refresh` and retries once — verified directly against the live server (real `200`, fresh access token, non-rotating refresh token handled correctly by `TokenStore.saveTokens`'s existing null-safe semantics). `ChatScreen` now has a dismissible `ErrorBanner` for any send/decide-permission failure, and a failed send restores the typed prompt instead of discarding it. Keyboard (`imePadding`) and real streaming (`assistant_delta`/`thinking_delta`) fixes from `v0.2.4` are included but still not device-verified. | Extended real-usage session on the Realme P2 Pro (well past 15 minutes) to confirm the token refresh actually fires transparently and chat keeps working instead of silently dying again |
 
 Session: 2026-07-27.
