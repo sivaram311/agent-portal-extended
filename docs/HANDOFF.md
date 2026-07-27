@@ -10,7 +10,7 @@
 | Field | Value |
 |-------|-------|
 | versionName | `0.2.2-fcm-live-dev` · versionCode **4** |
-| Latest release | TBD — filled in after release |
+| Latest release | [`v0.2.2-fcm-live-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.2-fcm-live-dev) |
 | APK SHA-256 | `771B974122DF01CE4A2574A7F14BECBE47865E10371E683022FBD358F1DF82EA` |
 | Prior tip | [`v0.2.1-fcm-android-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.1-fcm-android-dev) |
 
