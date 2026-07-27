@@ -10,7 +10,7 @@
 | Field | Value |
 |-------|-------|
 | versionName | `0.2.4-chat-streaming-dev` · versionCode **6** |
-| Latest release | TBD — filled in after release |
+| Latest release | [`v0.2.4-chat-streaming-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.4-chat-streaming-dev) |
 | APK SHA-256 | `EC440B7D1E537355421CA1DA8161BCD8966F0F23EB44E2ADACDA33CFD1B9EDE9` |
 | Prior tip | [`v0.2.3-docs-hotfix-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.3-docs-hotfix-dev) |
 
