@@ -101,6 +101,18 @@ class StompWebSocketClient(
                     if (allowAuthRetry && response?.code == 403 && tokenStore.getRefreshToken() != null) {
                         val refreshed = TokenRefresher.tryRefresh(tokenStore)
                         if (refreshed) {
+                            // connectInternal()'s own guard at the top only
+                            // proceeds when state is DISCONNECTED/FAILED --
+                            // it's still CONNECTING right now (nothing else
+                            // has touched it since this handshake started),
+                            // so without resetting it first the recursive
+                            // call below would hit that guard and silently
+                            // no-op, leaving the state stuck at CONNECTING
+                            // forever instead of ever reaching CONNECTED or
+                            // FAILED. (Caught in review before this shipped:
+                            // the first version of this retry had exactly
+                            // that bug.)
+                            _connectionState.value = ConnectionState.DISCONNECTED
                             connectInternal(allowAuthRetry = false)
                             return
                         }

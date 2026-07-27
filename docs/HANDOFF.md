@@ -11,7 +11,7 @@
 |-------|-------|
 | versionName | `0.2.6-token-refresh-403-fix-dev` · versionCode **8** |
 | Latest release | TBD — filled in after release |
-| APK SHA-256 | `C30E98A7599B68D4FA9316F826A276C355424B0EF9616D6AADD33494507D65A8` |
+| APK SHA-256 | `709643FA2F00042A0E9BE1AEBABF81C41396425FCD50C63D85B8F9A13702CA82` |
 | Prior tip | [`v0.2.5-token-refresh-fix-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.5-token-refresh-fix-dev) |
 
 ## Device testing log
@@ -19,7 +19,8 @@
 - **2026-07-27, `v0.2.3`**: first real device pass (Realme P2 Pro) — launch, notification permission grant, password login, session list all confirmed working.
 - **2026-07-27, `v0.2.4` in the field**: user reported "not responding" / "text not binding" after extended chat use. Diagnosed via the backend API directly — confirmed real prompt/response pairs existed server-side. Root cause identified as token expiry + silently-discarded failures. Shipped `v0.2.5`.
 - **2026-07-27, `v0.2.5` in the field**: user reported realtime updates require leaving and re-entering the session ("not automatically refresh... I should go back and come"). Investigated and found the `v0.2.5` fix had a real, verifiable flaw: it used OkHttp's `Authenticator`, which only auto-fires on HTTP `401` — but `curl` against the live server confirmed this backend returns `403` for every auth failure (no token, invalid token, expired token; both `/api/**` and `/ws/websocket`), never `401`. The `v0.2.5` refresh logic was correct but never once invoked. Fixed properly in `v0.2.6`.
-- `v0.2.6` not yet tested on-device — needs the same extended-usage scenario (15+ minutes, then check whether chat/realtime keeps working transparently) that surfaced the original bug.
+- `v0.2.6`'s first draft was caught by Reviewer **NO-GO** before it ever shipped: the WebSocket retry's recursive `connectInternal()` call hit its own reentrancy guard (state was still `CONNECTING`, never reset before retrying) and would have silently stuck at `CONNECTING` forever — the exact same "stops working, no error" symptom this fix exists to solve, just reproduced a different way. Fixed (reset state to `DISCONNECTED` before the retry call) and re-reviewed before push.
+- `v0.2.6` (post-fix) not yet tested on-device — needs the same extended-usage scenario (15+ minutes, then check whether chat/realtime keeps working transparently) that surfaced the original bug.
 
 ## Now → next
 
