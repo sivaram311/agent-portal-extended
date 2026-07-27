@@ -10,7 +10,7 @@
 | Field | Value |
 |-------|-------|
 | versionName | `0.2.3-docs-hotfix-dev` · versionCode **5** |
-| Latest release | TBD — filled in after release |
+| Latest release | [`v0.2.3-docs-hotfix-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.3-docs-hotfix-dev) |
 | APK SHA-256 | `BD91C9E5744D6BED2F9E58C970DF08E900CBF91C39D7C5F6B23920C66A974F3A` |
 | Prior tip | [`v0.2.2-fcm-live-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.2-fcm-live-dev) |
 
