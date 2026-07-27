@@ -10,7 +10,7 @@
 | Field | Value |
 |-------|-------|
 | versionName | `0.2.6-token-refresh-403-fix-dev` · versionCode **8** |
-| Latest release | TBD — filled in after release |
+| Latest release | [`v0.2.6-token-refresh-403-fix-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.6-token-refresh-403-fix-dev) |
 | APK SHA-256 | `709643FA2F00042A0E9BE1AEBABF81C41396425FCD50C63D85B8F9A13702CA82` |
 | Prior tip | [`v0.2.5-token-refresh-fix-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.5-token-refresh-fix-dev) |
 
