@@ -59,14 +59,15 @@ object NetworkModule {
 
     /**
      * Client used for this app's own backend -- attaches the bearer token,
-     * and on a 401 (access token expired, 15min TTL) transparently refreshes
-     * via TokenAuthenticator and retries once.
+     * and on a 403 (access token expired, 15min TTL -- this backend never
+     * returns 401 for auth failures, see TokenAuthenticator's own doc
+     * comment) transparently refreshes and retries once.
      */
     fun provideOkHttpClient(tokenStore: TokenStore): OkHttpClient {
         return OkHttpClient.Builder()
             .addInterceptor(authInterceptor(tokenStore))
+            .addInterceptor(TokenAuthenticator(tokenStore))
             .addInterceptor(loggingInterceptor())
-            .authenticator(TokenAuthenticator(tokenStore))
             .build()
     }
 

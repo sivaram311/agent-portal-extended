@@ -57,6 +57,10 @@ class StompWebSocketClient(
     private val messageListeners = CopyOnWriteArrayList<(StompEvent) -> Unit>()
 
     fun connect() {
+        connectInternal(allowAuthRetry = true)
+    }
+
+    private fun connectInternal(allowAuthRetry: Boolean) {
         if (_connectionState.value == ConnectionState.CONNECTING ||
             _connectionState.value == ConnectionState.CONNECTED
         ) {
@@ -64,18 +68,7 @@ class StompWebSocketClient(
         }
         _connectionState.value = ConnectionState.CONNECTING
 
-        val base = wsBaseUrl.removeSuffix("/")
-        val accessToken = tokenStore.getAccessToken()
-        val url = buildString {
-            append(base)
-            append("/ws/websocket")
-            if (!accessToken.isNullOrBlank()) {
-                append("?access_token=")
-                append(accessToken)
-            }
-        }
-
-        val request = Request.Builder().url(url).build()
+        val request = buildConnectRequest()
         webSocket = okHttpClient.newWebSocket(
             request,
             object : WebSocketListener() {
@@ -92,10 +85,44 @@ class StompWebSocketClient(
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    // This backend returns 403 (never 401) for an expired or
+                    // missing access token, including on the WS upgrade
+                    // request itself (confirmed directly against the live
+                    // server: an unauthenticated /ws/websocket handshake
+                    // gets 403, same as /api/**). A stale token at connect()
+                    // time -- e.g. the ~15min access-token TTL expiring while
+                    // a chat screen sits open -- used to fail the handshake
+                    // exactly like this with no automatic retry, which is
+                    // what made realtime updates silently stop until the
+                    // screen was closed and reopened (a fresh ViewModel
+                    // reads a by-then-refreshed REST token and reconnects).
+                    // One refresh-and-reconnect attempt here closes that gap
+                    // without the caller needing to know it happened.
+                    if (allowAuthRetry && response?.code == 403 && tokenStore.getRefreshToken() != null) {
+                        val refreshed = TokenRefresher.tryRefresh(tokenStore)
+                        if (refreshed) {
+                            connectInternal(allowAuthRetry = false)
+                            return
+                        }
+                    }
                     _connectionState.value = ConnectionState.FAILED
                 }
             },
         )
+    }
+
+    private fun buildConnectRequest(): Request {
+        val base = wsBaseUrl.removeSuffix("/")
+        val accessToken = tokenStore.getAccessToken()
+        val url = buildString {
+            append(base)
+            append("/ws/websocket")
+            if (!accessToken.isNullOrBlank()) {
+                append("?access_token=")
+                append(accessToken)
+            }
+        }
+        return Request.Builder().url(url).build()
     }
 
     /**

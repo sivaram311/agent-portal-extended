@@ -1,110 +1,54 @@
 package buzz.delena.agentportal.core.network
 
 import buzz.delena.agentportal.core.data.TokenStore
-import buzz.delena.agentportal.core.network.dto.OAuthTokenResponse
-import kotlinx.serialization.Serializable
-import okhttp3.Authenticator
-import okhttp3.Request
+import okhttp3.Interceptor
 import okhttp3.Response
-import okhttp3.Route
-import java.io.BufferedReader
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
-
-// Matches com.css.auth.dto.RefreshTokenRequest.java field names exactly.
-@Serializable
-private data class RefreshTokenRequest(
-    val refreshToken: String,
-    val clientId: String,
-)
 
 /**
- * Real cause of "the app silently stops working after ~15 minutes": access
- * tokens expire (expiresIn=900s) and, without this, every subsequent
- * authenticated call just failed with 401 forever -- no refresh, no error
- * shown anywhere (see ChatViewModel.sendPrompt, which used to discard its
- * Result entirely). This is an OkHttp Authenticator: on a 401, refresh once
- * synchronously and retry the original request with the new token.
+ * Retries a request once after a transparent token refresh when the
+ * response is 403.
  *
- * Runs on a background thread by OkHttp's own contract for Authenticator
- * (blocking here is expected/correct, not a bug). Uses a bare
- * HttpURLConnection rather than routing back through Retrofit/the same
- * OkHttpClient this Authenticator is attached to, to avoid any risk of
- * recursing into itself.
+ * NOT an okhttp3.Authenticator, deliberately: OkHttp only invokes
+ * Authenticator automatically on HTTP 401, but this backend's Spring
+ * Security setup returns 403 for every unauthenticated/expired-token
+ * request on the api and ws paths (confirmed directly against the live
+ * server -- curl with no token, an invalid token, and an expired token
+ * all return 403, never 401; there's no AuthenticationEntryPoint
+ * configured to challenge with 401 + WWW-Authenticate). An
+ * Authenticator-based first attempt at this fix was reviewed, shipped,
+ * and never once fired, because the trigger condition it relied on
+ * never occurs on this backend. This plain Interceptor sees every
+ * response regardless of status code and retries manually instead.
  *
- * The CSS auth server's refresh response does not rotate the refresh token
- * (com.css.auth.service.AuthenticationService#refresh never sets one on the
- * returned TokenResponse) -- TokenStore.saveTokens already treats a null
- * refreshToken as "keep the existing one," so that's handled correctly
- * without special-casing here.
+ * Safe to treat 403 as "try a token refresh" specifically on this API
+ * surface: SecurityConfig applies only .authenticated() (no
+ * .hasRole/.hasAuthority checks) to those paths, so a 403 here is
+ * definitionally "not authenticated," never a legitimate authorization
+ * or permission denial that a token refresh wouldn't fix.
  */
-class TokenAuthenticator(private val tokenStore: TokenStore) : Authenticator {
+class TokenAuthenticator(private val tokenStore: TokenStore) : Interceptor {
 
-    override fun authenticate(route: Route?, response: Response): Request? {
-        // Already retried once for this request chain -- give up rather than
-        // loop forever if the refreshed token also comes back 401 (e.g. the
-        // refresh token itself is expired/revoked).
-        if (responseCount(response) >= 2) {
-            return null
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+        val response = chain.proceed(request)
+
+        if (response.code != 403 || tokenStore.getRefreshToken() == null) {
+            return response
         }
 
-        val refreshToken = tokenStore.getRefreshToken() ?: return null
-        val authUrl = tokenStore.getAuthUrl() ?: return null
-        val refreshPath = tokenStore.getRefreshPath() ?: return null
-        val clientId = tokenStore.getClientId() ?: return null
-
-        val newTokens = runCatching {
-            refreshSync(authUrl.trimEnd('/') + refreshPath, refreshToken, clientId)
-        }.getOrNull()
-
-        if (newTokens == null) {
-            // Refresh token itself is invalid/expired -- no way to recover
-            // without a fresh login. Clearing tokens means the next screen
-            // read of AuthRepository.isLoggedIn() correctly routes back to
-            // the login screen instead of looping on 401s forever.
-            tokenStore.clear()
-            return null
+        response.close()
+        val refreshed = TokenRefresher.tryRefresh(tokenStore)
+        if (!refreshed) {
+            // Refresh failed -- re-issue the original request as-is so the
+            // caller still gets a real (403) response to handle/surface,
+            // rather than silently swallowing it here.
+            return chain.proceed(request)
         }
 
-        tokenStore.saveTokens(newTokens.accessToken, newTokens.refreshToken)
-        return response.request.newBuilder()
-            .header("Authorization", "Bearer ${newTokens.accessToken}")
+        val newToken = tokenStore.getAccessToken() ?: return chain.proceed(request)
+        val retried = request.newBuilder()
+            .header("Authorization", "Bearer $newToken")
             .build()
-    }
-
-    private fun responseCount(response: Response): Int {
-        var count = 1
-        var prior = response.priorResponse
-        while (prior != null) {
-            count++
-            prior = prior.priorResponse
-        }
-        return count
-    }
-
-    private fun refreshSync(refreshUrl: String, refreshToken: String, clientId: String): OAuthTokenResponse {
-        val body = NetworkModule.json.encodeToString(
-            RefreshTokenRequest.serializer(),
-            RefreshTokenRequest(refreshToken = refreshToken, clientId = clientId),
-        )
-        val connection = (URL(refreshUrl).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("Accept", "application/json")
-            connectTimeout = 15_000
-            readTimeout = 15_000
-        }
-        try {
-            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { it.write(body) }
-            val status = connection.responseCode
-            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            val responseBody = stream?.bufferedReader(Charsets.UTF_8)?.use(BufferedReader::readText).orEmpty()
-            check(status in 200..299) { "Token refresh failed ($status): $responseBody" }
-            return NetworkModule.json.decodeFromString(OAuthTokenResponse.serializer(), responseBody)
-        } finally {
-            connection.disconnect()
-        }
+        return chain.proceed(retried)
     }
 }
