@@ -4,7 +4,7 @@ Native Android client (and future extended-features surface) for **[Agent Portal
 
 This is a **separate repo** from `agent-portal` itself: `https://github.com/sivaram311/agent-portal-extended` (public). It talks to the existing Agent Portal REST/WebSocket API; it does not fork or duplicate the backend.
 
-**Status:** `v0.2.0-auth-push-lock-dev` (versionCode 2). Builds clean on the host, backend verified end-to-end against live DEV. **Zero device/emulator verification** — no ADB/emulator on this build host (same limitation this machine has repeatedly hit with `E:\MyWorkspace\sandbox\forgecity-launcher`; see [docs/HANDOFF.md](docs/HANDOFF.md) for the disclosure pattern).
+**Status:** `v0.2.2-fcm-live-dev` (versionCode 4). Builds clean on the host, backend verified end-to-end against live DEV, including a real (non-mocked) Firebase send. **Zero device/emulator verification** — no ADB/emulator on this build host (same limitation this machine has repeatedly hit with `E:\MyWorkspace\sandbox\forgecity-launcher`; see [docs/HANDOFF.md](docs/HANDOFF.md) for the disclosure pattern).
 
 ## Features
 
@@ -19,12 +19,12 @@ Built:
 - Biometric / device-credential app-lock (`AppLockGate`) gating the app when a session is stored — fails open with a visible warning if the device has neither configured
 - Inline notification-action permission approval — Approve/Reject a pending tool-permission request straight from a system notification, works today for foreground/backgrounded-but-alive app process
 - Backend `POST/DELETE /api/devices` device-token registration + `PushNotificationService`, verified end-to-end on DEV
-- Firebase Cloud Messaging — Android side fully wired (project provisioned, `google-services.json`, registered `AgentPortalFirebaseMessagingService` receiving token refresh + data messages). **Backend send is still log-only** — needs a Firebase Admin SDK service-account key (a separate credential from `google-services.json`) before pushes actually leave the server
+- Firebase Cloud Messaging — **live end-to-end**, both sides: Android registered/receiving (`AgentPortalFirebaseMessagingService`), backend `PushNotificationService` initializes the Admin SDK from a service-account key and really sends, with stale/unregistered tokens auto-removed. Verified with a real (non-mocked) send against Google's servers — a throwaway smoke test confirmed a genuine FCM-level rejection for a deliberately-invalid token, proving the credential authenticates correctly
 - OAuth/PKCE SSO via Custom Tabs + AppAuth-Android — **built but not functional against the live server yet**, see the caveat below
 
 Not yet done / explicitly deferred (see [ROADMAP.md](ROADMAP.md)):
 
-- Real FCM sending from the backend (Admin SDK service-account key not yet provisioned)
+- A real push notification arriving on a real device (no ADB on this build host to verify)
 - Full per-event-type STOMP realtime parsing (currently a generic refetch-on-any-event)
 - Device Lab E2E on the Realme P2 Pro
 

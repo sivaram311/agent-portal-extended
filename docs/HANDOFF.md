@@ -9,15 +9,15 @@
 
 | Field | Value |
 |-------|-------|
-| versionName | `0.2.1-fcm-android-dev` · versionCode **3** |
+| versionName | `0.2.2-fcm-live-dev` · versionCode **4** |
 | Latest release | TBD — filled in after release |
-| APK SHA-256 | TBD — filled in after release |
-| Prior tip | [`v0.2.0-auth-push-lock-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.0-auth-push-lock-dev) |
+| APK SHA-256 | `771B974122DF01CE4A2574A7F14BECBE47865E10371E683022FBD358F1DF82EA` |
+| Prior tip | [`v0.2.1-fcm-android-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.1-fcm-android-dev) |
 
 ## Now → next
 
 | Now | Next |
 |-----|------|
-| Firebase project provisioned (`my-aadlc-proj`); Android side fully wired (`google-services.json`, `google-services` plugin, `AgentPortalFirebaseMessagingService` registered and receiving). Backend send is still log-only — needs a Firebase Admin SDK service-account key (separate credential). OAuth/PKCE SSO still not functional against the live server (blocked on a real `centralized-security-system` promote). Zero device/emulator verification. | Get the Admin SDK service-account key and wire real backend sending; promote `centralized-security-system` DEV→PROD for SSO; sideload on the Realme P2 Pro for the first real device pass |
+| Firebase push is live end-to-end. Backend `PushNotificationService` initializes the Admin SDK from a service-account key at `E:\MyAgent\workflow\secrets\firebase-admin-agent-portal.json` (machine-local, never committed) and really sends — verified with a throwaway JUnit smoke test that got back a genuine `INVALID_ARGUMENT` FCM rejection for a deliberately-invalid token, proving real auth against Google's servers. Stale/unregistered tokens auto-delete from `device_tokens`. Found and fixed a real bug along the way: `SessionEventBus` only forwarded `input_required` (Antigravity's free-text nudge, no `permissionId`) to push, not `permission_required`/`plan_required` (Cursor's actual approvable-permission events) — fixed on both backend and Android. OAuth/PKCE SSO still not functional against the live server (blocked on a real `centralized-security-system` promote). Zero device/emulator verification. | Promote `centralized-security-system` DEV→PROD for SSO; sideload on the Realme P2 Pro — the first point a real push notification (and the whole app) can be observed working on an actual device |
 
-Session: 2026-07-26.
+Session: 2026-07-27.

@@ -53,10 +53,13 @@ class AgentPortalFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
-        if (eventType == "input_required") {
+        // permission_required / plan_required carry a real permissionId (Cursor
+        // ACP tool/plan approval) -- input_required is Antigravity's free-text
+        // nudge and never has one, so it's informational-only here.
+        if (eventType == "permission_required" || eventType == "plan_required") {
             val permissionId = data["permissionId"]
             if (permissionId == null) {
-                Log.w(TAG, "input_required push for session $sessionId missing permissionId; ignoring")
+                Log.w(TAG, "$eventType push for session $sessionId missing permissionId; ignoring")
                 return
             }
             val toolLabel = data["toolLabel"] ?: "Tool permission"
