@@ -9,15 +9,15 @@
 
 | Field | Value |
 |-------|-------|
-| versionName | `0.2.2-fcm-live-dev` · versionCode **4** |
-| Latest release | [`v0.2.2-fcm-live-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.2-fcm-live-dev) |
-| APK SHA-256 | `771B974122DF01CE4A2574A7F14BECBE47865E10371E683022FBD358F1DF82EA` |
-| Prior tip | [`v0.2.1-fcm-android-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.1-fcm-android-dev) |
+| versionName | `0.2.3-docs-hotfix-dev` · versionCode **5** |
+| Latest release | TBD — filled in after release |
+| APK SHA-256 | `BD91C9E5744D6BED2F9E58C970DF08E900CBF91C39D7C5F6B23920C66A974F3A` |
+| Prior tip | [`v0.2.2-fcm-live-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.2-fcm-live-dev) |
 
 ## Now → next
 
 | Now | Next |
 |-----|------|
-| Firebase push is live end-to-end. Backend `PushNotificationService` initializes the Admin SDK from a service-account key at `E:\MyAgent\workflow\secrets\firebase-admin-agent-portal.json` (machine-local, never committed) and really sends — verified with a throwaway JUnit smoke test that got back a genuine `INVALID_ARGUMENT` FCM rejection for a deliberately-invalid token, proving real auth against Google's servers. Stale/unregistered tokens auto-delete from `device_tokens`. Found and fixed a real bug along the way: `SessionEventBus` only forwarded `input_required` (Antigravity's free-text nudge, no `permissionId`) to push, not `permission_required`/`plan_required` (Cursor's actual approvable-permission events) — fixed on both backend and Android. OAuth/PKCE SSO still not functional against the live server (blocked on a real `centralized-security-system` promote). Zero device/emulator verification. | Promote `centralized-security-system` DEV→PROD for SSO; sideload on the Realme P2 Pro — the first point a real push notification (and the whole app) can be observed working on an actual device |
+| Docs-only hotfix (release-link fill-in from the previous ship) + version bump — no app-code change since `v0.2.2-fcm-live-dev`. **Pushed on explicit user instruction without the standing Reviewer-GO gate** (CONSCIOUS.md #17 normally requires one before any push) — logged here and in ACTIVITY-LOG.md for the audit trail. Firebase push, biometric lock, notification-action approval all remain as verified in `v0.2.2`. OAuth/PKCE SSO still blocked on a `centralized-security-system` promote. Zero device/emulator verification. | Promote `centralized-security-system` DEV→PROD for SSO; sideload on the Realme P2 Pro — the first point a real push notification (and the whole app) can be observed working on an actual device |
 
 Session: 2026-07-27.
