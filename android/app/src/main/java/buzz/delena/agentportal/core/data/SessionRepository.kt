@@ -98,6 +98,35 @@ class SessionRepository(
         }
     }
 
+    suspend fun cancelSession(sessionId: String): Result<Unit> {
+        return try {
+            api.cancelSession(sessionId)
+            Result.success(Unit)
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+    }
+
+    suspend fun archiveSession(sessionId: String): Result<SessionDto> {
+        return try {
+            val archived = api.archiveSession(sessionId)
+            sessionDao.upsert(archived.toEntity())
+            Result.success(archived)
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+    }
+
+    suspend fun getSession(sessionId: String): Result<SessionDto> {
+        return try {
+            val session = api.getSession(sessionId)
+            sessionDao.upsert(session.toEntity())
+            Result.success(session)
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+    }
+
     private fun SessionDto.toEntity() = SessionEntity(
         id = id,
         title = title,

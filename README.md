@@ -4,12 +4,13 @@ Native Android client (and future extended-features surface) for **[Agent Portal
 
 This is a **separate repo** from `agent-portal` itself: `https://github.com/sivaram311/agent-portal-extended` (public). It talks to the existing Agent Portal REST/WebSocket API; it does not fork or duplicate the backend.
 
-**Status:** `v0.2.6-token-refresh-403-fix-dev` (versionCode 8). Builds clean on the host. Real-device pass on a Realme P2 Pro confirmed login/session list working, then surfaced a real bug — chat prompts and realtime updates stopped working after ~15 minutes with zero error shown. First fix (`v0.2.5`) turned out to target the wrong HTTP status code and never actually fired; the real fix is in this build. Not yet re-confirmed on-device.
+**Status:** `v0.3.0-happy-path-dev` (versionCode 9). Ships the **supervisor happy path**: Sessions (Needs you) → Chat → Decision sheet → stream → Archive. Builds clean. Awaiting on-device UX pass.
 
 ## Features
 
 Built:
 
+- **Happy-path supervisor loop** — All / Needs you / Running / Failed filters; thin create (Cursor|Antigravity + demo); Decision bottom sheet (Allow once / Always / Reject + plan Accept/Reject); Cancel/Archive; notification tap → Chat
 - Compose UI — login screen, session list, chat/transcript screen with a Claude-app-like UX, styled in Agent Portal's own **navy/teal** branding (not Anthropic's)
 - Retrofit/OkHttp networking layer against the existing Agent Portal REST API
 - Hand-rolled STOMP-over-WebSocket client for realtime session streaming (`/ws/websocket` on the portal backend)
@@ -27,8 +28,10 @@ Built:
 
 Not yet done / explicitly deferred (see [ROADMAP.md](ROADMAP.md)):
 
-- A real push notification arriving on a real device (no ADB on this build host to verify — device testing so far has covered login/session-list only)
-- Formal 3-device Device Lab E2E (Realme P2 Pro / tablet / desktop) — this repo has had one manual real-device pass, not the full hired-E2E process other apps on this machine use
+- OAuth/PKCE SSO live against css-next (needs promote)
+- A real push notification arriving on a real device (no ADB on this build host)
+- Formal Device Lab E2E on Realme P2 Pro
+- Full portal tabs (Logs/Code/Guidance) — out of happy-path scope
 
 ## Known blocker: OAuth/PKCE SSO is not live yet
 

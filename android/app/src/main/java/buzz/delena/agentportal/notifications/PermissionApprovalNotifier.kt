@@ -20,6 +20,8 @@ private const val CHANNEL_NAME = "Permission approvals"
 const val EXTRA_SESSION_ID = "buzz.delena.agentportal.extra.SESSION_ID"
 const val EXTRA_PERMISSION_ID = "buzz.delena.agentportal.extra.PERMISSION_ID"
 const val EXTRA_DECISION = "buzz.delena.agentportal.extra.DECISION"
+/** Tap-notification deep link into Chat for the happy-path supervisor loop. */
+const val EXTRA_OPEN_SESSION_ID = "buzz.delena.agentportal.extra.OPEN_SESSION_ID"
 
 // Mirrors PermissionStatus's entry names (core/network/dto/PermissionDto.kt).
 // decidePermission treats "decision" as a free string matching one of those
@@ -75,13 +77,25 @@ object PermissionApprovalNotifier {
         val approveIntent = decisionPendingIntent(context, sessionId, permissionId, DECISION_APPROVE, notificationId)
         val rejectIntent = decisionPendingIntent(context, sessionId, permissionId, DECISION_REJECT, notificationId)
 
+        val openChatIntent = Intent(context, buzz.delena.agentportal.MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_OPEN_SESSION_ID, sessionId)
+        }
+        val contentPending = PendingIntent.getActivity(
+            context,
+            notificationId,
+            openChatIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Permission requested")
+            .setContentTitle("Needs you")
             .setContentText(toolLabel)
+            .setContentIntent(contentPending)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            .setAutoCancel(false)
+            .setAutoCancel(true)
             .setOngoing(false)
             .addAction(0, "Reject", rejectIntent)
             .addAction(0, "Approve", approveIntent)

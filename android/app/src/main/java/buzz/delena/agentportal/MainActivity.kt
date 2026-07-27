@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import buzz.delena.agentportal.nav.AgentPortalNavHost
+import buzz.delena.agentportal.notifications.EXTRA_OPEN_SESSION_ID
 import buzz.delena.agentportal.theme.AgentPortalTheme
 import buzz.delena.agentportal.ui.components.AppLockGate
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,20 +26,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 // this only widens the base class, it doesn't remove anything.
 class MainActivity : FragmentActivity() {
 
-    // css-next's OAuth redirect (buzz.delena.agentportal://oauth/callback)
-    // lands here via onNewIntent (MainActivity is singleTask), not through
-    // the ActivityResultLauncher LoginScreen uses to launch the Custom Tab.
-    // Bridged into the Compose tree as a StateFlow rather than a direct
-    // ViewModel reference: the AuthViewModel instance that started the SSO
-    // flow lives inside the LOGIN NavBackStackEntry's ViewModelStore, which
-    // this Activity-level callback has no handle to.
     private val pendingOAuthIntent = MutableStateFlow<Intent?>(null)
+    private val pendingOpenSessionId = MutableStateFlow<String?>(null)
 
-    // Android 13+ (API 33) requires POST_NOTIFICATIONS to be granted at
-    // runtime, not just declared in the manifest -- PermissionApprovalNotifier
-    // silently skips posting without it. This is a plain no-op result
-    // callback (no rationale UI): if the user denies it, permission-approval
-    // pushes just won't show, same as any other notification opt-out.
     private val requestNotificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { }
@@ -59,7 +49,10 @@ class MainActivity : FragmentActivity() {
                     val hasSession = (application as AgentPortalApplication)
                         .container.tokenStore.hasAccessToken()
                     AppLockGate(hasSession = hasSession) {
-                        AgentPortalNavHost(pendingOAuthIntent = pendingOAuthIntent)
+                        AgentPortalNavHost(
+                            pendingOAuthIntent = pendingOAuthIntent,
+                            pendingOpenSessionId = pendingOpenSessionId,
+                        )
                     }
                 }
             }
@@ -73,8 +66,13 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        if (intent?.data?.scheme == "buzz.delena.agentportal") {
+        if (intent == null) return
+        if (intent.data?.scheme == "buzz.delena.agentportal") {
             pendingOAuthIntent.value = intent
+        }
+        intent.getStringExtra(EXTRA_OPEN_SESSION_ID)?.let { sessionId ->
+            pendingOpenSessionId.value = sessionId
+            intent.removeExtra(EXTRA_OPEN_SESSION_ID)
         }
     }
 }

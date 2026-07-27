@@ -14,6 +14,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import buzz.delena.agentportal.AgentPortalApplication
+import buzz.delena.agentportal.notifications.EXTRA_OPEN_SESSION_ID
 import buzz.delena.agentportal.ui.screens.ChatScreen
 import buzz.delena.agentportal.ui.screens.LoginScreen
 import buzz.delena.agentportal.ui.screens.SessionListScreen
@@ -23,24 +24,25 @@ import buzz.delena.agentportal.ui.viewmodel.SessionListViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-/**
- * Nav graph wired to real screens (ui.screens) via thin ViewModels
- * (ui.viewmodel) that talk to the AppContainer's repositories/STOMP client.
- * Route names are the contract in Routes.kt.
- */
 @Composable
 fun AgentPortalNavHost(
     navController: NavHostController = rememberNavController(),
-    // css-next's OAuth redirect (buzz.delena.agentportal://oauth/callback)
-    // lands on MainActivity.onNewIntent, which bridges it in here since the
-    // AuthViewModel that started the flow lives in the LOGIN
-    // NavBackStackEntry's ViewModelStore, not reachable from the Activity
-    // directly. Defaults to an always-empty flow so Previews/tests that
-    // don't care about SSO don't need to supply one.
     pendingOAuthIntent: StateFlow<Intent?> = MutableStateFlow(null),
+    pendingOpenSessionId: StateFlow<String?> = MutableStateFlow(null),
 ) {
     val container = (LocalContext.current.applicationContext as AgentPortalApplication).container
     val startDestination = if (container.authRepository.isLoggedIn()) Routes.SESSION_LIST else Routes.LOGIN
+
+    val openSessionId by pendingOpenSessionId.collectAsState()
+    LaunchedEffect(openSessionId) {
+        val sessionId = openSessionId ?: return@LaunchedEffect
+        if (container.authRepository.isLoggedIn()) {
+            navController.navigate(Routes.chat(sessionId)) {
+                launchSingleTop = true
+            }
+        }
+        (pendingOpenSessionId as? MutableStateFlow)?.value = null
+    }
 
     NavHost(navController = navController, startDestination = startDestination) {
         composable(Routes.LOGIN) {
@@ -86,18 +88,17 @@ fun AgentPortalNavHost(
             SessionListScreen(
                 state = state,
                 onSessionClick = { sessionId -> navController.navigate(Routes.chat(sessionId)) },
-                onCreateSession = {
-                    // Skeleton default: "demo" workspace (see agent-portal/workspaces/demo).
-                    // A real create-session dialog (workspace picker, provider choice,
-                    // presets) is a documented fast-follow, not part of this skeleton.
+                onCreateSession = { provider ->
                     viewModel.createSession(
                         workspacePath = "demo",
                         title = null,
-                        provider = null,
+                        provider = provider,
                         onCreated = { sessionId -> navController.navigate(Routes.chat(sessionId)) },
                     )
                 },
+                onFilterChange = viewModel::setFilter,
                 onRefresh = viewModel::refresh,
+                onDismissError = viewModel::dismissError,
             )
         }
 
@@ -113,6 +114,9 @@ fun AgentPortalNavHost(
                     sessionRepository = container.sessionRepository,
                     stompClient = container.stompClient,
                     appContext = LocalContext.current.applicationContext,
+                    onArchived = {
+                        navController.popBackStack(Routes.SESSION_LIST, inclusive = false)
+                    },
                 ),
             )
             val state by viewModel.state.collectAsState()
@@ -120,8 +124,15 @@ fun AgentPortalNavHost(
                 state = state,
                 onPromptChange = viewModel::onPromptChange,
                 onSendPrompt = viewModel::sendPrompt,
-                onApprovePermission = viewModel::approvePermission,
-                onRejectPermission = viewModel::rejectPermission,
+                onOpenDecisionSheet = viewModel::openDecisionSheet,
+                onDismissDecisionSheet = viewModel::dismissDecisionSheet,
+                onAllowOnce = viewModel::allowOnce,
+                onAllowAlways = viewModel::allowAlways,
+                onReject = viewModel::reject,
+                onAcceptPlan = viewModel::acceptPlan,
+                onRejectPlan = viewModel::rejectPlan,
+                onCancelRun = viewModel::cancelRun,
+                onArchive = viewModel::archive,
                 onDismissError = viewModel::dismissError,
                 onBack = { navController.popBackStack() },
             )

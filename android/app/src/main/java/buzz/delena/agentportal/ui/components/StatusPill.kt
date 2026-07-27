@@ -36,6 +36,24 @@ fun statusToneFor(status: String): StatusTone = when (status.uppercase()) {
     else -> StatusTone.Muted
 }
 
+/** Human-facing status label for the supervisor happy path. */
+fun friendlyStatusLabel(status: String): String = when (status.uppercase()) {
+    "WAITING_PERMISSION", "WAITING_PLAN" -> "Needs you"
+    "STREAMING", "RUNNING", "ACTIVE" -> "Running"
+    "IDLE" -> "Idle"
+    "FAILED", "ERROR" -> "Failed"
+    "COMPLETED" -> "Done"
+    "CANCELLED" -> "Cancelled"
+    "ARCHIVED" -> "Archived"
+    else -> status
+}
+
+fun isNeedsYouStatus(status: String): Boolean =
+    status.uppercase() in attentionStatuses
+
+fun isRunningStatus(status: String): Boolean =
+    status.uppercase() in setOf("STREAMING", "RUNNING", "ACTIVE")
+
 @Composable
 fun StatusPill(
     label: String,

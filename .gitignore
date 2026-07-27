@@ -13,3 +13,4 @@ android/**/google-services.json
 
 *.log
 .env
+*.apk

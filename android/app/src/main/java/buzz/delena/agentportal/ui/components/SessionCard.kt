@@ -62,7 +62,7 @@ fun SessionCard(
                     modifier = Modifier.weight(1f),
                 )
                 StatusPill(
-                    label = session.status,
+                    label = friendlyStatusLabel(session.status),
                     tone = statusToneFor(session.status),
                     modifier = Modifier.padding(start = 8.dp),
                 )
