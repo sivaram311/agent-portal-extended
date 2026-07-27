@@ -9,15 +9,19 @@
 
 | Field | Value |
 |-------|-------|
-| versionName | `0.2.3-docs-hotfix-dev` · versionCode **5** |
-| Latest release | [`v0.2.3-docs-hotfix-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.3-docs-hotfix-dev) |
-| APK SHA-256 | `BD91C9E5744D6BED2F9E58C970DF08E900CBF91C39D7C5F6B23920C66A974F3A` |
-| Prior tip | [`v0.2.2-fcm-live-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.2-fcm-live-dev) |
+| versionName | `0.2.4-chat-streaming-dev` · versionCode **6** |
+| Latest release | TBD — filled in after release |
+| APK SHA-256 | `EC440B7D1E537355421CA1DA8161BCD8966F0F23EB44E2ADACDA33CFD1B9EDE9` |
+| Prior tip | [`v0.2.3-docs-hotfix-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.3-docs-hotfix-dev) |
+
+## Device testing (new as of 2026-07-27)
+
+First-ever real device pass, Realme P2 Pro (via `v0.2.3-docs-hotfix-dev`): app launched, notification permission prompt appeared and was granted, password-lane login succeeded, session list rendered the real backend data (2 IDLE + 1 CANCELLED session) correctly. Chat screen, biometric re-lock on background/foreground, and the new streaming/keyboard fixes below have not yet been re-confirmed on-device against this specific build.
 
 ## Now → next
 
 | Now | Next |
 |-----|------|
-| Docs-only hotfix (release-link fill-in from the previous ship) + version bump — no app-code change since `v0.2.2-fcm-live-dev`. **Pushed on explicit user instruction without the standing Reviewer-GO gate** (CONSCIOUS.md #17 normally requires one before any push) — logged here and in ACTIVITY-LOG.md for the audit trail. Firebase push, biometric lock, notification-action approval all remain as verified in `v0.2.2`. OAuth/PKCE SSO still blocked on a `centralized-security-system` promote. Zero device/emulator verification. | Promote `centralized-security-system` DEV→PROD for SSO; sideload on the Realme P2 Pro — the first point a real push notification (and the whole app) can be observed working on an actual device |
+| Two real bugs found and fixed, both surfaced by a user bug report (written in Flutter terms against a Kotlin/Compose app — translated the underlying issues, verified which applied here before fixing): (1) chat input bar had no `imePadding()`, so the keyboard could cover the text field on newer Android with edge-to-edge enabled; (2) `ChatViewModel` was doing generic "refetch on any STOMP event" instead of parsing the backend's real per-token streaming events (`assistant_delta`/`thinking_delta`) — now appends live text as it streams, same source the web frontend already uses. Neither fix has been device-verified yet. | Sideload `v0.2.4` on the Realme P2 Pro and actually type in the chat input with the keyboard open, and send a prompt to watch text stream in live — first real confirmation either fix works as intended |
 
 Session: 2026-07-27.

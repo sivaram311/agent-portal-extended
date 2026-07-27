@@ -4,7 +4,7 @@ Native Android client (and future extended-features surface) for **[Agent Portal
 
 This is a **separate repo** from `agent-portal` itself: `https://github.com/sivaram311/agent-portal-extended` (public). It talks to the existing Agent Portal REST/WebSocket API; it does not fork or duplicate the backend.
 
-**Status:** `v0.2.2-fcm-live-dev` (versionCode 4). Builds clean on the host, backend verified end-to-end against live DEV, including a real (non-mocked) Firebase send. **Zero device/emulator verification** — no ADB/emulator on this build host (same limitation this machine has repeatedly hit with `E:\MyWorkspace\sandbox\forgecity-launcher`; see [docs/HANDOFF.md](docs/HANDOFF.md) for the disclosure pattern).
+**Status:** `v0.2.4-chat-streaming-dev` (versionCode 6). Builds clean on the host. **First real-device pass completed 2026-07-27** on a Realme P2 Pro — login, session list (real backend data), and the notification permission prompt all confirmed working; that closes this repo's long-standing "zero device verification" gap for the core flow, though chat-screen interaction (keyboard, streaming, biometric re-lock) is not yet re-confirmed against this build specifically.
 
 ## Features
 
@@ -15,7 +15,9 @@ Built:
 - Hand-rolled STOMP-over-WebSocket client for realtime session streaming (`/ws/websocket` on the portal backend)
 - Room for local session/message caching
 - EncryptedSharedPreferences for JWT token storage
-- Password-lane login, session list, and chat wired end-to-end (ViewModels + nav graph), **verified against a live DEV backend** (login → JWT → authenticated session list/chat, all `200`)
+- Password-lane login, session list, and chat wired end-to-end (ViewModels + nav graph), **verified against a live DEV backend** (login → JWT → authenticated session list/chat, all `200`) **and on a real device**
+- Real per-token chat streaming — `ChatViewModel` parses the backend's actual STOMP event schema (`assistant_delta`/`thinking_delta`, the same source the web frontend's streaming reads) and appends text live, no more waiting for a full response before anything appears
+- Chat input bar keyboard handling (`imePadding()` on the input container) — the input field no longer sits behind the keyboard when typing
 - Biometric / device-credential app-lock (`AppLockGate`) gating the app when a session is stored — fails open with a visible warning if the device has neither configured
 - Inline notification-action permission approval — Approve/Reject a pending tool-permission request straight from a system notification, works today for foreground/backgrounded-but-alive app process
 - Backend `POST/DELETE /api/devices` device-token registration + `PushNotificationService`, verified end-to-end on DEV
@@ -24,9 +26,8 @@ Built:
 
 Not yet done / explicitly deferred (see [ROADMAP.md](ROADMAP.md)):
 
-- A real push notification arriving on a real device (no ADB on this build host to verify)
-- Full per-event-type STOMP realtime parsing (currently a generic refetch-on-any-event)
-- Device Lab E2E on the Realme P2 Pro
+- A real push notification arriving on a real device (no ADB on this build host to verify — device testing so far has covered login/session-list only)
+- Formal 3-device Device Lab E2E (Realme P2 Pro / tablet / desktop) — this repo has had one manual real-device pass, not the full hired-E2E process other apps on this machine use
 
 ## Known blocker: OAuth/PKCE SSO is not live yet
 

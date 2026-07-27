@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -110,7 +111,13 @@ fun ChatScreen(
             )
         },
         bottomBar = {
-            Column {
+            // Edge-to-edge (enableEdgeToEdge() in MainActivity) means the
+            // activity's own decor no longer resizes for the IME the way
+            // android:windowSoftInputMode="adjustResize" alone implies pre-Compose
+            // -- without an explicit imePadding() here, this bar stays fixed at
+            // the bottom of the screen and the keyboard draws over it instead of
+            // pushing it up.
+            Column(modifier = Modifier.imePadding()) {
                 if (state.pendingPermission != null) {
                     PermissionRequestCard(
                         permission = state.pendingPermission,

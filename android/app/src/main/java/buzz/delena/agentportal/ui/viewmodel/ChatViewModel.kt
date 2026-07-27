@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import buzz.delena.agentportal.core.data.SessionRepository
 import buzz.delena.agentportal.core.data.local.MessageEntity
 import buzz.delena.agentportal.core.network.ConnectionState
+import buzz.delena.agentportal.core.network.NetworkModule
 import buzz.delena.agentportal.core.network.StompWebSocketClient
 import buzz.delena.agentportal.core.network.dto.PermissionStatus
 import buzz.delena.agentportal.notifications.PermissionApprovalNotifier
@@ -17,15 +18,34 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
+
+// Mirrors the backend's AgentEventDto (com.agentportal.dto), the exact shape
+// SessionEventBus sends as each STOMP MESSAGE frame body. payload is
+// intentionally a loose JsonObject (its shape varies per event type) rather
+// than a fixed data class.
+@Serializable
+private data class StompAgentEvent(
+    @SerialName("sessionId") val sessionId: String? = null,
+    val type: String,
+    val payload: JsonObject? = null,
+)
 
 /**
- * Skeleton realtime wiring: connects the STOMP client and subscribes to this
- * session's topic, but treats every inbound frame as a generic "something
- * changed, refetch" signal rather than parsing the backend's full event
- * schema -- that schema isn't modeled on the Android side yet (deliberately
- * out of scope for this skeleton, see docs/ROADMAP.md). Messages and pending
- * permissions are refreshed by REST poll on session open, after sending a
- * prompt, and on every STOMP frame for this session.
+ * Realtime wiring: connects the STOMP client and subscribes to this
+ * session's topic. assistant_delta / thinking_delta frames (the backend's
+ * real per-token streaming events, emitted from AgentBridge as the Cursor
+ * ACP session/update stream arrives) are appended directly into the
+ * in-progress assistant message for a live typewriter effect -- they are
+ * NOT persisted to Room themselves, so the local streaming message uses a
+ * client-generated placeholder id. Every other event type falls back to the
+ * original "something changed, refetch over REST" behavior, which also
+ * naturally supersedes the streaming placeholder with the real
+ * backend-persisted message once refreshMessages() completes (Room emits a
+ * fresh list keyed by the real id, replacing the whole in-memory list).
  */
 class ChatViewModel(
     private val sessionId: String,
@@ -37,6 +57,9 @@ class ChatViewModel(
 
     private val _state = MutableStateFlow(ChatUiState(sessionTitle = initialTitle))
     val state: StateFlow<ChatUiState> = _state.asStateFlow()
+
+    private var streamingMessageId: String? = null
+    private val streamingBuffer = StringBuilder()
 
     init {
         viewModelScope.launch {
@@ -50,11 +73,73 @@ class ChatViewModel(
         viewModelScope.launch {
             stompClient.connectionState.collect { connectionState ->
                 if (connectionState == ConnectionState.CONNECTED) {
-                    stompClient.subscribeToSession(sessionId).collect {
-                        refresh()
+                    stompClient.subscribeToSession(sessionId).collect { event ->
+                        handleStompEvent(event.bodyJson)
                     }
                 }
             }
+        }
+    }
+
+    private fun handleStompEvent(bodyJson: String) {
+        val event = runCatching {
+            NetworkModule.json.decodeFromString(StompAgentEvent.serializer(), bodyJson)
+        }.getOrNull()
+
+        // Unparseable frame (e.g. a STOMP control frame, not an AgentEventDto) --
+        // fall back to the safe original behavior rather than dropping it silently.
+        if (event == null) {
+            refresh()
+            return
+        }
+
+        when (event.type) {
+            "assistant_delta" -> appendStreamingDelta(event.payload)
+            // thinking_delta is Cursor's internal reasoning trace, not part of
+            // the final assistant message -- no bubble model for it yet
+            // (ChatMessageItem has no "thinking" variant), so it's a no-op
+            // rather than corrupting the visible transcript with it.
+            "thinking_delta" -> Unit
+            else -> {
+                // Any non-delta event (assistant_message, permission_required,
+                // run_completed, etc.) means the streaming turn this buffer was
+                // tracking is over one way or another -- clear it so a stale
+                // placeholder can't linger, then reconcile from REST as before.
+                streamingMessageId = null
+                streamingBuffer.setLength(0)
+                refresh()
+            }
+        }
+    }
+
+    private fun appendStreamingDelta(payload: JsonObject?) {
+        val text = payload?.get("text")?.jsonPrimitive?.content
+        if (text.isNullOrEmpty()) return
+
+        streamingBuffer.append(text)
+        val currentId = streamingMessageId
+
+        if (currentId == null) {
+            val newId = "streaming-${System.currentTimeMillis()}"
+            streamingMessageId = newId
+            _state.value = _state.value.copy(
+                messages = _state.value.messages + ChatMessageItem(
+                    id = newId,
+                    isUser = false,
+                    contentMarkdown = streamingBuffer.toString(),
+                    timeLabel = "now",
+                ),
+            )
+        } else {
+            _state.value = _state.value.copy(
+                messages = _state.value.messages.map { message ->
+                    if (message.id == currentId) {
+                        message.copy(contentMarkdown = streamingBuffer.toString())
+                    } else {
+                        message
+                    }
+                },
+            )
         }
     }
 

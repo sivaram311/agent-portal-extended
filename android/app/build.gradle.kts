@@ -17,8 +17,8 @@ android {
         applicationId = "buzz.delena.agentportal"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.2.3-docs-hotfix-dev"
+        versionCode = 6
+        versionName = "0.2.4-chat-streaming-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Default DEV backend; overridable per build without code changes.
