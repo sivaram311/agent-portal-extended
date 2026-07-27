@@ -10,7 +10,7 @@
 | Field | Value |
 |-------|-------|
 | versionName | `0.2.5-token-refresh-fix-dev` · versionCode **7** |
-| Latest release | TBD — filled in after release |
+| Latest release | [`v0.2.5-token-refresh-fix-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.5-token-refresh-fix-dev) |
 | APK SHA-256 | `85447E0339B099014AB439BED4DE49BF6E50E325996AD2B4D4D0952346768A71` |
 | Prior tip | [`v0.2.4-chat-streaming-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.2.4-chat-streaming-dev) |
 
