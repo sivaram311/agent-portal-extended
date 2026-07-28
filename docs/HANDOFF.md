@@ -8,8 +8,7 @@
 | Field | Value |
 |-------|-------|
 | versionName | `0.4.1-tool-noise-fix-dev` · versionCode **11** |
-| Latest release | [`v0.4.1-tool-noise-fix-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.4.1-tool-noise-fix-dev) |
-| Prior tip | [`v0.4.0-claude-thread-dev`](https://github.com/sivaram311/agent-portal-extended/releases/tag/v0.4.0-claude-thread-dev) |
+| APK SHA-256 | `3692BA0750674E5CA64DE48F18908383C2F5BD44AC99549B0FDFB77A30475E44` |
 
 ## v0.4.1 — tool noise fix
 
