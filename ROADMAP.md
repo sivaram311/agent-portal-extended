@@ -16,7 +16,8 @@ Prioritized tracks for the native Android client (and future extended-features s
 | P1 | Access-token refresh + error surfacing | **Done** (`v0.2.6`) — 403-triggered interceptor + WS handshake retry |
 | P1 | Biometric app-lock + EncryptedSharedPreferences | Done |
 | **P0 happy path** | Sessions → Chat → Decision → stream → archive | Done `v0.3.0` |
-| **P0 Claude thread** | In-thread activity chips + bottom sheets (timeline, diffs, code) | **Done `v0.4.0-claude-thread-dev`** |
+| **P0 Claude thread** | In-thread activity chips + bottom sheets | Done `v0.4.0` |
+| **P0 tool noise** | Turn-scope + categorize + filter + no random toolCallId | **Done `v0.4.1-tool-noise-fix-dev`** |
 | P2 | Firebase Cloud Messaging on-device proof | Code live; arrival unverified |
 | P2 | Device Lab E2E on Realme P2 Pro | Blocked — no ADB |
 

@@ -47,20 +47,19 @@ import buzz.delena.agentportal.theme.ApColors
 import buzz.delena.agentportal.ui.screens.ToolStepItem
 
 /**
- * Collapsible Claude-style summary under a chat turn: "Ran N tools ▸".
- * Expanding opens a bottom sheet with a vertical timeline.
+ * Collapsible Claude-style summary under a chat turn.
+ * Primary chip = edits/commands; separate reads chip; changes chip.
  */
 @Composable
 fun TurnActivitySummary(
-    toolCount: Int,
+    chips: List<buzz.delena.agentportal.ui.activity.ActivityChipLabel>,
     changeCount: Int,
-    runningCount: Int,
-    failedCount: Int,
     onOpenTools: () -> Unit,
+    onOpenReads: () -> Unit,
     onOpenChanges: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (toolCount <= 0 && changeCount <= 0) return
+    if (chips.isEmpty() && changeCount <= 0) return
 
     Column(
         modifier = modifier
@@ -68,20 +67,19 @@ fun TurnActivitySummary(
             .padding(top = 6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        if (toolCount > 0) {
+        chips.forEach { chip ->
             SummaryChip(
-                label = buildString {
-                    append(if (runningCount > 0) "Running " else "Ran ")
-                    append(toolCount)
-                    append(if (toolCount == 1) " tool" else " tools")
-                    if (failedCount > 0) append(" · $failedCount failed")
-                },
-                tone = when {
-                    failedCount > 0 -> ApColors.Danger
-                    runningCount > 0 -> ApColors.Warning
+                label = chip.text,
+                tone = when (chip.kind) {
+                    buzz.delena.agentportal.ui.activity.ChipKind.READS -> ApColors.Info
                     else -> ApColors.TextMuted
                 },
-                onClick = onOpenTools,
+                onClick = {
+                    when (chip.kind) {
+                        buzz.delena.agentportal.ui.activity.ChipKind.READS -> onOpenReads()
+                        else -> onOpenTools()
+                    }
+                },
             )
         }
         if (changeCount > 0) {
@@ -139,10 +137,20 @@ private fun SummaryChip(
 @Composable
 fun ActivityTimelineSheet(
     steps: List<ToolStepItem>,
+    reads: List<ToolStepItem>,
+    showReads: Boolean,
+    turnScoped: Boolean,
+    sessionRawCount: Int,
+    onToggleReads: () -> Unit,
     onDismiss: () -> Unit,
     onOpenStepDetail: (ToolStepItem) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val commands = steps.filter {
+        it.category == buzz.delena.agentportal.ui.screens.ToolCategory.SHELL ||
+            it.category == buzz.delena.agentportal.ui.screens.ToolCategory.EDIT ||
+            it.category == buzz.delena.agentportal.ui.screens.ToolCategory.OTHER
+    }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -161,10 +169,17 @@ fun ActivityTimelineSheet(
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "${steps.size} step${if (steps.size == 1) "" else "s"}",
+                text = buildString {
+                    append(if (turnScoped) "This turn" else "Session")
+                    append(" · ${commands.size} attention")
+                    if (reads.isNotEmpty()) append(" · ${reads.size} reads")
+                    if (sessionRawCount > commands.size + reads.size) {
+                        append(" · $sessionRawCount raw")
+                    }
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = ApColors.TextMuted,
-                modifier = Modifier.padding(top = 2.dp, bottom = 16.dp),
+                modifier = Modifier.padding(top = 2.dp, bottom = 12.dp),
             )
 
             Column(
@@ -172,16 +187,70 @@ fun ActivityTimelineSheet(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
             ) {
-                steps.forEachIndexed { index, step ->
-                    TimelineNode(
-                        step = step,
-                        isLast = index == steps.lastIndex,
-                        onClick = { onOpenStepDetail(step) },
+                if (commands.isNotEmpty()) {
+                    SectionHeader("Commands & edits")
+                    commands.forEachIndexed { index, step ->
+                        TimelineNode(
+                            step = step,
+                            isLast = index == commands.lastIndex && (!showReads || reads.isEmpty()),
+                            onClick = { onOpenStepDetail(step) },
+                        )
+                    }
+                }
+
+                if (reads.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onToggleReads)
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = if (showReads) "Hide reads (${reads.size})" else "Show reads (${reads.size})",
+                            color = ApColors.Info,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Icon(
+                            imageVector = Icons.Filled.ExpandMore,
+                            contentDescription = null,
+                            tint = ApColors.Info,
+                        )
+                    }
+                    if (showReads) {
+                        reads.forEachIndexed { index, step ->
+                            TimelineNode(
+                                step = step,
+                                isLast = index == reads.lastIndex,
+                                onClick = { onOpenStepDetail(step) },
+                            )
+                        }
+                    }
+                }
+
+                if (commands.isEmpty() && reads.isEmpty()) {
+                    Text(
+                        text = "No meaningful tools in this turn.",
+                        color = ApColors.TextMuted,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        color = ApColors.TextMuted,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(bottom = 8.dp, top = 4.dp),
+    )
 }
 
 @Composable

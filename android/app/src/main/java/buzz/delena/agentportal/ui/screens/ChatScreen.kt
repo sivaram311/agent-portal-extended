@@ -64,12 +64,23 @@ data class ChatMessageItem(
     val timeLabel: String,
 )
 
+enum class ToolCategory {
+    READ,
+    EDIT,
+    SHELL,
+    OTHER,
+}
+
 data class ToolStepItem(
     val id: String,
     val title: String,
     val status: String?,
     val subtitle: String? = null,
     val output: String? = null,
+    val kind: String? = null,
+    val category: ToolCategory = ToolCategory.OTHER,
+    val startedAt: String? = null,
+    val toolCallId: String? = null,
 )
 
 data class FileChangeItem(
@@ -103,6 +114,11 @@ data class ChatUiState(
     val sessionStatus: String = "",
     val messages: List<ChatMessageItem> = emptyList(),
     val tools: List<ToolStepItem> = emptyList(),
+    val readTools: List<ToolStepItem> = emptyList(),
+    val activityChips: List<buzz.delena.agentportal.ui.activity.ActivityChipLabel> = emptyList(),
+    val showReadsInTimeline: Boolean = false,
+    val turnScoped: Boolean = true,
+    val sessionRawToolCount: Int = 0,
     val changes: List<FileChangeItem> = emptyList(),
     val selectedChange: FileChangeItem? = null,
     val selectedTool: ToolStepItem? = null,
@@ -112,13 +128,12 @@ data class ChatUiState(
     val activeSheet: ChatSheet = ChatSheet.None,
     val error: String? = null,
 ) {
-    val toolCount get() = tools.size
     val changeCount get() = changes.size
-    val runningToolCount get() = tools.count {
-        it.status.equals("running", true) || it.status.equals("in_progress", true)
-    }
     val failedToolCount get() = tools.count {
         it.status.equals("failed", true) || it.status.equals("error", true)
+    }
+    val runningToolCount get() = tools.count {
+        it.status.equals("running", true) || it.status.equals("in_progress", true)
     }
 }
 
@@ -132,6 +147,8 @@ fun ChatScreen(
     onDismissSheet: () -> Unit,
     onOpenToolsSheet: () -> Unit,
     onOpenChangesSheet: () -> Unit,
+    onOpenReadsSheet: () -> Unit,
+    onToggleShowReads: () -> Unit,
     onSelectTool: (ToolStepItem) -> Unit,
     onSelectChange: (FileChangeItem) -> Unit,
     onAcceptChange: (String) -> Unit,
@@ -149,7 +166,7 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     var menuOpen by remember { mutableStateOf(false) }
 
-    LaunchedEffect(state.messages.size, state.toolCount) {
+    LaunchedEffect(state.messages.size, state.activityChips.size) {
         if (state.messages.isNotEmpty()) {
             listState.animateScrollToItem(state.messages.lastIndex.coerceAtLeast(0))
         }
@@ -278,11 +295,10 @@ fun ChatScreen(
                     val isLatestAssistant = !message.isUser && message.id == state.messages.lastOrNull { !it.isUser }?.id
                     if (isLatestAssistant) {
                         TurnActivitySummary(
-                            toolCount = state.toolCount,
+                            chips = state.activityChips,
                             changeCount = state.changeCount,
-                            runningCount = state.runningToolCount,
-                            failedCount = state.failedToolCount,
                             onOpenTools = onOpenToolsSheet,
+                            onOpenReads = onOpenReadsSheet,
                             onOpenChanges = onOpenChangesSheet,
                             modifier = Modifier.padding(end = 48.dp),
                         )
@@ -312,6 +328,11 @@ fun ChatScreen(
         }
         ChatSheet.Tools -> ActivityTimelineSheet(
             steps = state.tools,
+            reads = state.readTools,
+            showReads = state.showReadsInTimeline,
+            turnScoped = state.turnScoped,
+            sessionRawCount = state.sessionRawToolCount,
+            onToggleReads = onToggleShowReads,
             onDismiss = onDismissSheet,
             onOpenStepDetail = onSelectTool,
         )

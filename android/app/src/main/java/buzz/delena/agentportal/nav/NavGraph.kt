@@ -128,6 +128,8 @@ fun AgentPortalNavHost(
                 onDismissSheet = viewModel::dismissSheet,
                 onOpenToolsSheet = viewModel::openToolsSheet,
                 onOpenChangesSheet = viewModel::openChangesSheet,
+                onOpenReadsSheet = viewModel::openReadsSheet,
+                onToggleShowReads = viewModel::toggleShowReads,
                 onSelectTool = viewModel::selectTool,
                 onSelectChange = viewModel::selectChange,
                 onAcceptChange = viewModel::acceptChange,

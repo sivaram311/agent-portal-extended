@@ -4,7 +4,7 @@ Native Android client (and future extended-features surface) for **[Agent Portal
 
 This is a **separate repo** from `agent-portal` itself: `https://github.com/sivaram311/agent-portal-extended` (public). It talks to the existing Agent Portal REST/WebSocket API; it does not fork or duplicate the backend.
 
-**Status:** `v0.4.0-claude-thread-dev` (versionCode 10). Claude-style chat thread: activity chips + bottom sheets for tools/diffs. Happy path (`v0.3.0`) included.
+**Status:** `v0.4.1-tool-noise-fix-dev` (versionCode 11). Turn-scoped activity chips (not session-wide 176 tools); reads collapsed; backend skips tool updates without ids.
 
 ## Features
 

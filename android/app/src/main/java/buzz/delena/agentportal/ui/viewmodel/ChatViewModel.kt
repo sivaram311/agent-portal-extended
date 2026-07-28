@@ -11,8 +11,8 @@ import buzz.delena.agentportal.core.network.NetworkModule
 import buzz.delena.agentportal.core.network.StompWebSocketClient
 import buzz.delena.agentportal.core.network.dto.FileChangeDto
 import buzz.delena.agentportal.core.network.dto.PermissionStatus
-import buzz.delena.agentportal.core.network.dto.ToolRunDto
 import buzz.delena.agentportal.notifications.PermissionApprovalNotifier
+import buzz.delena.agentportal.ui.activity.ToolActivity
 import buzz.delena.agentportal.ui.components.countDiffLines
 import buzz.delena.agentportal.ui.screens.ChatMessageItem
 import buzz.delena.agentportal.ui.screens.ChatSheet
@@ -54,7 +54,9 @@ class ChatViewModel(
     init {
         viewModelScope.launch {
             sessionRepository.observeMessages(sessionId).collect { entities ->
-                _state.value = _state.value.copy(messages = entities.map { it.toItem() })
+                val items = entities.map { it.toItem() }
+                _state.value = _state.value.copy(messages = items)
+                refreshActivity(messages = items)
             }
         }
         refresh()
@@ -287,17 +289,43 @@ class ChatViewModel(
         }
     }
 
-    private fun refreshActivity() {
+    private fun refreshActivity(messages: List<ChatMessageItem> = _state.value.messages) {
         viewModelScope.launch {
-            val tools = sessionRepository.getTools(sessionId).getOrDefault(emptyList()).map { it.toStep() }
+            val rawTools = sessionRepository.getTools(sessionId).getOrDefault(emptyList())
             val changes = sessionRepository.getChanges(sessionId).getOrDefault(emptyList()).map { it.toItem() }
             val selectedPath = _state.value.selectedChange?.path
+            val activity = ToolActivity.buildTurnActivity(
+                allTools = rawTools,
+                messages = messages,
+                showReads = _state.value.showReadsInTimeline,
+            )
             _state.value = _state.value.copy(
-                tools = tools,
+                tools = activity.steps,
+                readTools = activity.reads,
+                activityChips = activity.chipLabels,
+                turnScoped = activity.turnScoped,
+                sessionRawToolCount = activity.sessionRawCount,
                 changes = changes,
                 selectedChange = changes.firstOrNull { it.path == selectedPath } ?: changes.firstOrNull(),
             )
         }
+    }
+
+    fun openReadsSheet() {
+        _state.value = _state.value.copy(
+            showReadsInTimeline = true,
+            activeSheet = ChatSheet.Tools,
+        )
+        refreshActivity()
+    }
+
+    fun toggleShowReads() {
+        val next = !_state.value.showReadsInTimeline
+        _state.value = _state.value.copy(
+            showReadsInTimeline = next,
+            activeSheet = ChatSheet.Tools,
+        )
+        refreshActivity()
     }
 
     private suspend fun refreshPermissions() {
@@ -348,14 +376,6 @@ class ChatViewModel(
         isUser = role == "USER",
         contentMarkdown = content,
         timeLabel = createdAt,
-    )
-
-    private fun ToolRunDto.toStep() = ToolStepItem(
-        id = id,
-        title = toolName?.ifBlank { null } ?: kind ?: "Tool",
-        status = status,
-        subtitle = argsJson?.take(160),
-        output = output,
     )
 
     private fun FileChangeDto.toItem(): FileChangeItem {
