@@ -15,10 +15,10 @@ Prioritized tracks for the native Android client (and future extended-features s
 | P1 | Chat input bar keyboard handling | **Done** — `imePadding()` |
 | P1 | Access-token refresh + error surfacing | **Done** (`v0.2.6`) — 403-triggered interceptor + WS handshake retry |
 | P1 | Biometric app-lock + EncryptedSharedPreferences | Done |
-| **P0 happy path** | **Sessions → Chat → Decision sheet → stream → archive** | **Done in `v0.3.0-happy-path-dev`** — Needs-you filter, thin create sheet (provider + demo), Decision bottom sheet (Allow once / Always / Reject + plan Accept/Reject), Cancel/Archive overflow, notification tap → open chat |
-| P2 | Firebase Cloud Messaging + device tokens | Live end-to-end (code path); **on-device push arrival still unverified** (no ADB on build host) |
-| P2 | Inline notification-action permission approval | Done for foreground/backgrounded-but-alive; FCM path wired |
-| P2 | Device Lab E2E on Realme P2 Pro | Blocked — no ADB on build host |
+| **P0 happy path** | Sessions → Chat → Decision → stream → archive | Done `v0.3.0` |
+| **P0 Claude thread** | In-thread activity chips + bottom sheets (timeline, diffs, code) | **Done `v0.4.0-claude-thread-dev`** |
+| P2 | Firebase Cloud Messaging on-device proof | Code live; arrival unverified |
+| P2 | Device Lab E2E on Realme P2 Pro | Blocked — no ADB |
 
 ## Happy path (shipped)
 

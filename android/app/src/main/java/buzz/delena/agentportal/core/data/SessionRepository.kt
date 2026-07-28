@@ -6,11 +6,14 @@ import buzz.delena.agentportal.core.data.local.SessionDao
 import buzz.delena.agentportal.core.data.local.SessionEntity
 import buzz.delena.agentportal.core.network.AgentPortalApi
 import buzz.delena.agentportal.core.network.dto.CreateSessionRequest
+import buzz.delena.agentportal.core.network.dto.FileChangeDto
 import buzz.delena.agentportal.core.network.dto.MessageDto
+import buzz.delena.agentportal.core.network.dto.PathRequest
 import buzz.delena.agentportal.core.network.dto.PermissionDecisionRequest
 import buzz.delena.agentportal.core.network.dto.PermissionDto
 import buzz.delena.agentportal.core.network.dto.PromptRequest
 import buzz.delena.agentportal.core.network.dto.SessionDto
+import buzz.delena.agentportal.core.network.dto.ToolRunDto
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -122,6 +125,48 @@ class SessionRepository(
             val session = api.getSession(sessionId)
             sessionDao.upsert(session.toEntity())
             Result.success(session)
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+    }
+
+    suspend fun getTools(sessionId: String): Result<List<ToolRunDto>> {
+        return try {
+            Result.success(api.getTools(sessionId))
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+    }
+
+    suspend fun getChanges(sessionId: String): Result<List<FileChangeDto>> {
+        return try {
+            Result.success(api.getChanges(sessionId))
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+    }
+
+    suspend fun getChangeDiff(sessionId: String, path: String): Result<FileChangeDto> {
+        return try {
+            Result.success(api.getChangeDiff(sessionId, path))
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+    }
+
+    suspend fun acceptChange(sessionId: String, path: String): Result<Unit> {
+        return try {
+            api.acceptChange(sessionId, PathRequest(path))
+            Result.success(Unit)
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+    }
+
+    suspend fun rejectChange(sessionId: String, path: String): Result<Unit> {
+        return try {
+            api.rejectChange(sessionId, PathRequest(path))
+            Result.success(Unit)
         } catch (t: Throwable) {
             Result.failure(t)
         }

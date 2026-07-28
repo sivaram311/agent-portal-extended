@@ -9,11 +9,17 @@ import buzz.delena.agentportal.core.data.local.MessageEntity
 import buzz.delena.agentportal.core.network.ConnectionState
 import buzz.delena.agentportal.core.network.NetworkModule
 import buzz.delena.agentportal.core.network.StompWebSocketClient
+import buzz.delena.agentportal.core.network.dto.FileChangeDto
 import buzz.delena.agentportal.core.network.dto.PermissionStatus
+import buzz.delena.agentportal.core.network.dto.ToolRunDto
 import buzz.delena.agentportal.notifications.PermissionApprovalNotifier
+import buzz.delena.agentportal.ui.components.countDiffLines
 import buzz.delena.agentportal.ui.screens.ChatMessageItem
+import buzz.delena.agentportal.ui.screens.ChatSheet
 import buzz.delena.agentportal.ui.screens.ChatUiState
+import buzz.delena.agentportal.ui.screens.FileChangeItem
 import buzz.delena.agentportal.ui.screens.PendingPermissionItem
+import buzz.delena.agentportal.ui.screens.ToolStepItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -84,6 +90,11 @@ class ChatViewModel(
                 refresh()
                 openDecisionSheet()
             }
+            "tool_call", "run_completed", "run_failed", "run_cancelled", "assistant_message" -> {
+                streamingMessageId = null
+                streamingBuffer.setLength(0)
+                refresh()
+            }
             else -> {
                 streamingMessageId = null
                 streamingBuffer.setLength(0)
@@ -136,6 +147,7 @@ class ChatViewModel(
             sessionRepository.sendPrompt(sessionId, prompt)
                 .onSuccess {
                     _state.value = _state.value.copy(isSending = false)
+                    refreshActivity()
                     refreshPermissions()
                 }
                 .onFailure { t ->
@@ -154,33 +166,66 @@ class ChatViewModel(
 
     fun openDecisionSheet() {
         if (_state.value.pendingPermission != null) {
-            _state.value = _state.value.copy(showDecisionSheet = true)
+            _state.value = _state.value.copy(activeSheet = ChatSheet.Decision)
         }
     }
 
-    fun dismissDecisionSheet() {
-        _state.value = _state.value.copy(showDecisionSheet = false)
+    fun openToolsSheet() {
+        _state.value = _state.value.copy(activeSheet = ChatSheet.Tools)
+        refreshActivity()
     }
 
-    fun allowOnce(permissionId: String) {
-        decidePermission(permissionId, PermissionStatus.ALLOW_ONCE.name)
+    fun openChangesSheet() {
+        _state.value = _state.value.copy(activeSheet = ChatSheet.Changes)
+        refreshActivity()
     }
 
-    fun allowAlways(permissionId: String) {
-        decidePermission(permissionId, PermissionStatus.ALLOW_ALWAYS.name)
+    fun dismissSheet() {
+        val backToTools = _state.value.activeSheet == ChatSheet.ToolDetail
+        _state.value = _state.value.copy(
+            activeSheet = if (backToTools) ChatSheet.Tools else ChatSheet.None,
+            selectedTool = if (backToTools) null else _state.value.selectedTool,
+        )
     }
 
-    fun reject(permissionId: String) {
-        decidePermission(permissionId, PermissionStatus.REJECT_ONCE.name)
+    fun selectTool(step: ToolStepItem) {
+        _state.value = _state.value.copy(
+            selectedTool = step,
+            activeSheet = ChatSheet.ToolDetail,
+        )
     }
 
-    fun acceptPlan(permissionId: String) {
-        decidePermission(permissionId, "accept")
+    fun selectChange(change: FileChangeItem) {
+        viewModelScope.launch {
+            val enriched = sessionRepository.getChangeDiff(sessionId, change.path)
+                .getOrNull()
+                ?.toItem()
+                ?: change
+            _state.value = _state.value.copy(selectedChange = enriched)
+        }
     }
 
-    fun rejectPlan(permissionId: String) {
-        decidePermission(permissionId, "reject")
+    fun acceptChange(path: String) {
+        viewModelScope.launch {
+            sessionRepository.acceptChange(sessionId, path)
+                .onSuccess { refreshActivity() }
+                .onFailure { t -> _state.value = _state.value.copy(error = errorMessage(t)) }
+        }
     }
+
+    fun rejectChange(path: String) {
+        viewModelScope.launch {
+            sessionRepository.rejectChange(sessionId, path)
+                .onSuccess { refreshActivity() }
+                .onFailure { t -> _state.value = _state.value.copy(error = errorMessage(t)) }
+        }
+    }
+
+    fun allowOnce(permissionId: String) = decidePermission(permissionId, PermissionStatus.ALLOW_ONCE.name)
+    fun allowAlways(permissionId: String) = decidePermission(permissionId, PermissionStatus.ALLOW_ALWAYS.name)
+    fun reject(permissionId: String) = decidePermission(permissionId, PermissionStatus.REJECT_ONCE.name)
+    fun acceptPlan(permissionId: String) = decidePermission(permissionId, "accept")
+    fun rejectPlan(permissionId: String) = decidePermission(permissionId, "reject")
 
     fun cancelRun() {
         viewModelScope.launch {
@@ -204,7 +249,7 @@ class ChatViewModel(
                 .onSuccess {
                     _state.value = _state.value.copy(
                         pendingPermission = null,
-                        showDecisionSheet = false,
+                        activeSheet = ChatSheet.None,
                         error = null,
                     )
                     PermissionApprovalNotifier.cancelPermissionNotification(appContext, permissionId)
@@ -237,7 +282,21 @@ class ChatViewModel(
                 )
             }
             runCatching { sessionRepository.refreshMessages(sessionId) }
+            refreshActivity()
             refreshPermissions()
+        }
+    }
+
+    private fun refreshActivity() {
+        viewModelScope.launch {
+            val tools = sessionRepository.getTools(sessionId).getOrDefault(emptyList()).map { it.toStep() }
+            val changes = sessionRepository.getChanges(sessionId).getOrDefault(emptyList()).map { it.toItem() }
+            val selectedPath = _state.value.selectedChange?.path
+            _state.value = _state.value.copy(
+                tools = tools,
+                changes = changes,
+                selectedChange = changes.firstOrNull { it.path == selectedPath } ?: changes.firstOrNull(),
+            )
         }
     }
 
@@ -251,7 +310,7 @@ class ChatViewModel(
                     id = it.id,
                     kind = it.kind,
                     toolLabel = when {
-                        isPlan -> it.kind ?: "Plan"
+                        isPlan -> "Plan"
                         !it.toolCallId.isNullOrBlank() -> "Tool: ${it.toolCallId}"
                         else -> it.kind ?: "Tool permission"
                     },
@@ -261,7 +320,11 @@ class ChatViewModel(
             }
             _state.value = _state.value.copy(
                 pendingPermission = item,
-                showDecisionSheet = if (item != null && item.id != previousId) true else _state.value.showDecisionSheet,
+                activeSheet = if (item != null && item.id != previousId) {
+                    ChatSheet.Decision
+                } else {
+                    _state.value.activeSheet
+                },
             )
             if (pending != null && pending.id != previousId) {
                 PermissionApprovalNotifier.postPermissionNotification(
@@ -286,6 +349,25 @@ class ChatViewModel(
         contentMarkdown = content,
         timeLabel = createdAt,
     )
+
+    private fun ToolRunDto.toStep() = ToolStepItem(
+        id = id,
+        title = toolName?.ifBlank { null } ?: kind ?: "Tool",
+        status = status,
+        subtitle = argsJson?.take(160),
+        output = output,
+    )
+
+    private fun FileChangeDto.toItem(): FileChangeItem {
+        val (added, removed) = countDiffLines(unifiedDiff)
+        return FileChangeItem(
+            path = path,
+            status = status,
+            unifiedDiff = unifiedDiff,
+            addedLines = added,
+            removedLines = removed,
+        )
+    }
 
     class Factory(
         private val sessionId: String,

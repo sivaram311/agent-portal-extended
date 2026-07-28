@@ -44,18 +44,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import buzz.delena.agentportal.theme.AgentPortalTheme
 import buzz.delena.agentportal.theme.ApColors
+import buzz.delena.agentportal.ui.components.ActivityTimelineSheet
+import buzz.delena.agentportal.ui.components.ChangesDiffSheet
 import buzz.delena.agentportal.ui.components.ChatInputBar
 import buzz.delena.agentportal.ui.components.MessageBubble
 import buzz.delena.agentportal.ui.components.StatusPill
+import buzz.delena.agentportal.ui.components.ToolDetailSheet
+import buzz.delena.agentportal.ui.components.TurnActivitySummary
 import buzz.delena.agentportal.ui.components.friendlyStatusLabel
 import buzz.delena.agentportal.ui.components.isNeedsYouStatus
 import buzz.delena.agentportal.ui.components.statusToneFor
 
-/** One rendered chat message. Kept UI-layer-only; the parent's ViewModel maps its domain model to this. */
 data class ChatMessageItem(
     val id: String,
     val isUser: Boolean,
@@ -63,7 +64,22 @@ data class ChatMessageItem(
     val timeLabel: String,
 )
 
-/** A tool/plan decision the agent is blocked on. */
+data class ToolStepItem(
+    val id: String,
+    val title: String,
+    val status: String?,
+    val subtitle: String? = null,
+    val output: String? = null,
+)
+
+data class FileChangeItem(
+    val path: String,
+    val status: String?,
+    val unifiedDiff: String?,
+    val addedLines: Int,
+    val removedLines: Int,
+)
+
 data class PendingPermissionItem(
     val id: String,
     val kind: String?,
@@ -74,16 +90,37 @@ data class PendingPermissionItem(
     val isPlan: Boolean get() = kind.equals("plan", ignoreCase = true)
 }
 
+enum class ChatSheet {
+    None,
+    Decision,
+    Tools,
+    ToolDetail,
+    Changes,
+}
+
 data class ChatUiState(
     val sessionTitle: String = "",
     val sessionStatus: String = "",
     val messages: List<ChatMessageItem> = emptyList(),
+    val tools: List<ToolStepItem> = emptyList(),
+    val changes: List<FileChangeItem> = emptyList(),
+    val selectedChange: FileChangeItem? = null,
+    val selectedTool: ToolStepItem? = null,
     val promptDraft: String = "",
     val isSending: Boolean = false,
     val pendingPermission: PendingPermissionItem? = null,
-    val showDecisionSheet: Boolean = false,
+    val activeSheet: ChatSheet = ChatSheet.None,
     val error: String? = null,
-)
+) {
+    val toolCount get() = tools.size
+    val changeCount get() = changes.size
+    val runningToolCount get() = tools.count {
+        it.status.equals("running", true) || it.status.equals("in_progress", true)
+    }
+    val failedToolCount get() = tools.count {
+        it.status.equals("failed", true) || it.status.equals("error", true)
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,7 +129,13 @@ fun ChatScreen(
     onPromptChange: (String) -> Unit,
     onSendPrompt: () -> Unit,
     onOpenDecisionSheet: () -> Unit,
-    onDismissDecisionSheet: () -> Unit,
+    onDismissSheet: () -> Unit,
+    onOpenToolsSheet: () -> Unit,
+    onOpenChangesSheet: () -> Unit,
+    onSelectTool: (ToolStepItem) -> Unit,
+    onSelectChange: (FileChangeItem) -> Unit,
+    onAcceptChange: (String) -> Unit,
+    onRejectChange: (String) -> Unit,
     onAllowOnce: (String) -> Unit,
     onAllowAlways: (String) -> Unit,
     onReject: (String) -> Unit,
@@ -105,11 +148,10 @@ fun ChatScreen(
 ) {
     val listState = rememberLazyListState()
     var menuOpen by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    LaunchedEffect(state.messages.size) {
+    LaunchedEffect(state.messages.size, state.toolCount) {
         if (state.messages.isNotEmpty()) {
-            listState.animateScrollToItem(state.messages.lastIndex)
+            listState.animateScrollToItem(state.messages.lastIndex.coerceAtLeast(0))
         }
     }
 
@@ -158,6 +200,20 @@ fun ChatScreen(
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(
+                            text = { Text("Activity") },
+                            onClick = {
+                                menuOpen = false
+                                onOpenToolsSheet()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Changes") },
+                            onClick = {
+                                menuOpen = false
+                                onOpenChangesSheet()
+                            },
+                        )
+                        DropdownMenuItem(
                             text = { Text("Cancel run") },
                             onClick = {
                                 menuOpen = false
@@ -184,9 +240,13 @@ fun ChatScreen(
                 if (state.error != null) {
                     ErrorBanner(message = state.error, onDismiss = onDismissError)
                 }
-                if (state.pendingPermission != null && !state.showDecisionSheet) {
+                if (state.pendingPermission != null && state.activeSheet != ChatSheet.Decision) {
                     NeedsYouBanner(
-                        label = if (state.pendingPermission.isPlan) "Plan needs approval" else "Permission requested",
+                        label = if (state.pendingPermission.isPlan) {
+                            "Plan needs approval"
+                        } else {
+                            "Permission requested"
+                        },
                         onReview = onOpenDecisionSheet,
                     )
                 }
@@ -208,30 +268,65 @@ fun ChatScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             items(state.messages, key = { it.id }) { message ->
-                MessageBubble(
-                    isUser = message.isUser,
-                    contentMarkdown = message.contentMarkdown,
-                    timeLabel = message.timeLabel,
-                )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    MessageBubble(
+                        isUser = message.isUser,
+                        contentMarkdown = message.contentMarkdown,
+                        timeLabel = message.timeLabel,
+                    )
+                    // Attach activity chips under the latest assistant turn only.
+                    val isLatestAssistant = !message.isUser && message.id == state.messages.lastOrNull { !it.isUser }?.id
+                    if (isLatestAssistant) {
+                        TurnActivitySummary(
+                            toolCount = state.toolCount,
+                            changeCount = state.changeCount,
+                            runningCount = state.runningToolCount,
+                            failedCount = state.failedToolCount,
+                            onOpenTools = onOpenToolsSheet,
+                            onOpenChanges = onOpenChangesSheet,
+                            modifier = Modifier.padding(end = 48.dp),
+                        )
+                    }
+                }
             }
         }
     }
 
-    if (state.showDecisionSheet && state.pendingPermission != null) {
-        ModalBottomSheet(
-            onDismissRequest = onDismissDecisionSheet,
-            sheetState = sheetState,
-            containerColor = ApColors.Surface,
-        ) {
-            DecisionSheetContent(
-                permission = state.pendingPermission,
-                onAllowOnce = { onAllowOnce(state.pendingPermission.id) },
-                onAllowAlways = { onAllowAlways(state.pendingPermission.id) },
-                onReject = { onReject(state.pendingPermission.id) },
-                onAcceptPlan = { onAcceptPlan(state.pendingPermission.id) },
-                onRejectPlan = { onRejectPlan(state.pendingPermission.id) },
-            )
+    when (state.activeSheet) {
+        ChatSheet.Decision -> if (state.pendingPermission != null) {
+            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            ModalBottomSheet(
+                onDismissRequest = onDismissSheet,
+                sheetState = sheetState,
+                containerColor = ApColors.Surface,
+            ) {
+                DecisionSheetContent(
+                    permission = state.pendingPermission,
+                    onAllowOnce = { onAllowOnce(state.pendingPermission.id) },
+                    onAllowAlways = { onAllowAlways(state.pendingPermission.id) },
+                    onReject = { onReject(state.pendingPermission.id) },
+                    onAcceptPlan = { onAcceptPlan(state.pendingPermission.id) },
+                    onRejectPlan = { onRejectPlan(state.pendingPermission.id) },
+                )
+            }
         }
+        ChatSheet.Tools -> ActivityTimelineSheet(
+            steps = state.tools,
+            onDismiss = onDismissSheet,
+            onOpenStepDetail = onSelectTool,
+        )
+        ChatSheet.ToolDetail -> if (state.selectedTool != null) {
+            ToolDetailSheet(step = state.selectedTool, onDismiss = onDismissSheet)
+        }
+        ChatSheet.Changes -> ChangesDiffSheet(
+            changes = state.changes,
+            selected = state.selectedChange,
+            onSelect = onSelectChange,
+            onAccept = onAcceptChange,
+            onReject = onRejectChange,
+            onDismiss = onDismissSheet,
+        )
+        ChatSheet.None -> Unit
     }
 }
 
@@ -291,18 +386,13 @@ private fun DecisionSheetContent(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
             )
-            StatusPill(
-                label = "Needs you",
-                tone = statusToneFor("WAITING_PERMISSION"),
-            )
+            StatusPill(label = "Needs you", tone = statusToneFor("WAITING_PERMISSION"))
         }
-
         Text(
             text = permission.toolLabel,
             style = MaterialTheme.typography.titleMedium,
             color = ApColors.TextPrimary,
         )
-
         val body = permission.planMarkdown ?: permission.detail
         if (!body.isNullOrBlank()) {
             Text(
@@ -315,7 +405,6 @@ private fun DecisionSheetContent(
                     .padding(vertical = 4.dp),
             )
         }
-
         if (permission.isPlan) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -326,9 +415,7 @@ private fun DecisionSheetContent(
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = ApColors.Danger),
                     border = BorderStroke(1.dp, ApColors.Danger),
-                ) {
-                    Text("Reject")
-                }
+                ) { Text("Reject") }
                 Button(
                     onClick = onAcceptPlan,
                     modifier = Modifier.weight(1f),
@@ -336,9 +423,7 @@ private fun DecisionSheetContent(
                         containerColor = ApColors.Accent,
                         contentColor = ApColors.Background,
                     ),
-                ) {
-                    Text("Accept", fontWeight = FontWeight.SemiBold)
-                }
+                ) { Text("Accept", fontWeight = FontWeight.SemiBold) }
             }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -349,25 +434,19 @@ private fun DecisionSheetContent(
                         containerColor = ApColors.Accent,
                         contentColor = ApColors.Background,
                     ),
-                ) {
-                    Text("Allow once", fontWeight = FontWeight.SemiBold)
-                }
+                ) { Text("Allow once", fontWeight = FontWeight.SemiBold) }
                 OutlinedButton(
                     onClick = onAllowAlways,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = ApColors.Accent),
                     border = BorderStroke(1.dp, ApColors.Accent),
-                ) {
-                    Text("Always allow")
-                }
+                ) { Text("Always allow") }
                 OutlinedButton(
                     onClick = onReject,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = ApColors.Danger),
                     border = BorderStroke(1.dp, ApColors.Danger),
-                ) {
-                    Text("Reject")
-                }
+                ) { Text("Reject") }
             }
         }
     }
@@ -390,47 +469,5 @@ private fun ErrorBanner(message: String, onDismiss: () -> Unit) {
         TextButton(onClick = onDismiss) {
             Text("Dismiss", color = ApColors.TextMuted)
         }
-    }
-}
-
-private val previewMessages = listOf(
-    ChatMessageItem(
-        id = "1",
-        isUser = true,
-        contentMarkdown = "Can you add a health-check endpoint?",
-        timeLabel = "10:00 AM",
-    ),
-    ChatMessageItem(
-        id = "2",
-        isUser = false,
-        contentMarkdown = "Sure — adding `GET /healthz` returning `200 OK`.",
-        timeLabel = "10:00 AM",
-    ),
-)
-
-@Preview(showBackground = true, backgroundColor = 0xFF0F172A)
-@Composable
-private fun ChatScreenPreview() {
-    AgentPortalTheme {
-        ChatScreen(
-            state = ChatUiState(
-                sessionTitle = "Add health-check endpoint",
-                sessionStatus = "STREAMING",
-                messages = previewMessages,
-            ),
-            onPromptChange = {},
-            onSendPrompt = {},
-            onOpenDecisionSheet = {},
-            onDismissDecisionSheet = {},
-            onAllowOnce = {},
-            onAllowAlways = {},
-            onReject = {},
-            onAcceptPlan = {},
-            onRejectPlan = {},
-            onCancelRun = {},
-            onArchive = {},
-            onDismissError = {},
-            onBack = {},
-        )
     }
 }

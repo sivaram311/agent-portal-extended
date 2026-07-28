@@ -4,13 +4,14 @@ Native Android client (and future extended-features surface) for **[Agent Portal
 
 This is a **separate repo** from `agent-portal` itself: `https://github.com/sivaram311/agent-portal-extended` (public). It talks to the existing Agent Portal REST/WebSocket API; it does not fork or duplicate the backend.
 
-**Status:** `v0.3.0-happy-path-dev` (versionCode 9). Ships the **supervisor happy path**: Sessions (Needs you) → Chat → Decision sheet → stream → Archive. Builds clean. Awaiting on-device UX pass.
+**Status:** `v0.4.0-claude-thread-dev` (versionCode 10). Claude-style chat thread: activity chips + bottom sheets for tools/diffs. Happy path (`v0.3.0`) included.
 
 ## Features
 
 Built:
 
-- **Happy-path supervisor loop** — All / Needs you / Running / Failed filters; thin create (Cursor|Antigravity + demo); Decision bottom sheet (Allow once / Always / Reject + plan Accept/Reject); Cancel/Archive; notification tap → Chat
+- **Claude-style thread** — collapsible “Ran N tools / files changed” chips; Activity timeline sheet; tool detail (monospace + line numbers + Raw/Render); Changes sheet with green/red diff + Keep/Restore; thumb-zone composer (Auto / attach / mic)
+- **Happy-path supervisor loop** — All / Needs you / Running / Failed filters; thin create (Cursor|Antigravity + demo); Decision bottom sheet; Cancel/Archive; notification tap → Chat
 - Compose UI — login screen, session list, chat/transcript screen with a Claude-app-like UX, styled in Agent Portal's own **navy/teal** branding (not Anthropic's)
 - Retrofit/OkHttp networking layer against the existing Agent Portal REST API
 - Hand-rolled STOMP-over-WebSocket client for realtime session streaming (`/ws/websocket` on the portal backend)

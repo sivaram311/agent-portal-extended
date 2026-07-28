@@ -2,17 +2,21 @@ package buzz.delena.agentportal.core.network
 
 import buzz.delena.agentportal.core.network.dto.AuthConfigDto
 import buzz.delena.agentportal.core.network.dto.CreateSessionRequest
+import buzz.delena.agentportal.core.network.dto.FileChangeDto
 import buzz.delena.agentportal.core.network.dto.MessageDto
+import buzz.delena.agentportal.core.network.dto.PathRequest
 import buzz.delena.agentportal.core.network.dto.PermissionDecisionRequest
 import buzz.delena.agentportal.core.network.dto.PermissionDto
 import buzz.delena.agentportal.core.network.dto.PromptRequest
 import buzz.delena.agentportal.core.network.dto.SessionDto
+import buzz.delena.agentportal.core.network.dto.ToolRunDto
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 /**
  * Retrofit contract for this app's own backend (BuildConfig.API_BASE_URL).
@@ -42,9 +46,6 @@ interface AgentPortalApi {
         @Body request: PromptRequest,
     ): MessageDto
 
-    // Response body is a small status map ({"status":"cancelled"}); the
-    // caller does not need it, and the shared Json instance's
-    // ignoreUnknownKeys tolerates deserializing it into Unit.
     @POST("api/sessions/{id}/cancel")
     suspend fun cancelSession(@Path("id") sessionId: String): Unit
 
@@ -64,10 +65,30 @@ interface AgentPortalApi {
     @POST("api/sessions/{id}/unarchive")
     suspend fun unarchiveSession(@Path("id") sessionId: String): SessionDto
 
-    // Body format/content-type is not confirmed (could be plain text, an
-    // actuator-style object, or empty), so this uses the raw ResponseBody
-    // type -- Retrofit's built-in converter skips body parsing entirely for
-    // it, which is all a health probe needs: a successful HTTP status.
+    @GET("api/sessions/{id}/tools")
+    suspend fun getTools(@Path("id") sessionId: String): List<ToolRunDto>
+
+    @GET("api/sessions/{id}/changes")
+    suspend fun getChanges(@Path("id") sessionId: String): List<FileChangeDto>
+
+    @GET("api/sessions/{id}/changes/diff")
+    suspend fun getChangeDiff(
+        @Path("id") sessionId: String,
+        @Query("path") path: String,
+    ): FileChangeDto
+
+    @POST("api/sessions/{id}/changes/accept")
+    suspend fun acceptChange(
+        @Path("id") sessionId: String,
+        @Body body: PathRequest,
+    ): Unit
+
+    @POST("api/sessions/{id}/changes/reject")
+    suspend fun rejectChange(
+        @Path("id") sessionId: String,
+        @Body body: PathRequest,
+    ): Unit
+
     @GET("api/health")
     suspend fun health(): Response<ResponseBody>
 }
