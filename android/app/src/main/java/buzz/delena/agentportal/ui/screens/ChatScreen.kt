@@ -49,6 +49,7 @@ import buzz.delena.agentportal.theme.ApColors
 import buzz.delena.agentportal.ui.components.ActivityTimelineSheet
 import buzz.delena.agentportal.ui.components.ChangesDiffSheet
 import buzz.delena.agentportal.ui.components.ChatInputBar
+import buzz.delena.agentportal.ui.components.ConnectionStatusBar
 import buzz.delena.agentportal.ui.components.MessageBubble
 import buzz.delena.agentportal.ui.components.StatusPill
 import buzz.delena.agentportal.ui.components.ToolDetailSheet
@@ -127,6 +128,9 @@ data class ChatUiState(
     val pendingPermission: PendingPermissionItem? = null,
     val activeSheet: ChatSheet = ChatSheet.None,
     val error: String? = null,
+    val realtimeState: buzz.delena.agentportal.core.network.ConnectionState =
+        buzz.delena.agentportal.core.network.ConnectionState.DISCONNECTED,
+    val connectionStatus: buzz.delena.agentportal.ui.components.ConnectionStatusUi? = null,
 ) {
     val changeCount get() = changes.size
     val failedToolCount get() = tools.count {
@@ -165,6 +169,7 @@ fun ChatScreen(
 ) {
     val listState = rememberLazyListState()
     var menuOpen by remember { mutableStateOf(false) }
+    var connectionExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.messages.size, state.activityChips.size) {
         if (state.messages.isNotEmpty()) {
@@ -276,32 +281,43 @@ fun ChatScreen(
             }
         },
     ) { padding ->
-        LazyColumn(
-            state = listState,
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            items(state.messages, key = { it.id }) { message ->
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    MessageBubble(
-                        isUser = message.isUser,
-                        contentMarkdown = message.contentMarkdown,
-                        timeLabel = message.timeLabel,
-                    )
-                    // Attach activity chips under the latest assistant turn only.
-                    val isLatestAssistant = !message.isUser && message.id == state.messages.lastOrNull { !it.isUser }?.id
-                    if (isLatestAssistant) {
-                        TurnActivitySummary(
-                            chips = state.activityChips,
-                            changeCount = state.changeCount,
-                            onOpenTools = onOpenToolsSheet,
-                            onOpenReads = onOpenReadsSheet,
-                            onOpenChanges = onOpenChangesSheet,
-                            modifier = Modifier.padding(end = 48.dp),
+            state.connectionStatus?.let { status ->
+                ConnectionStatusBar(
+                    status = status,
+                    expanded = connectionExpanded,
+                    onToggle = { connectionExpanded = !connectionExpanded },
+                )
+            }
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                items(state.messages, key = { it.id }) { message ->
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        MessageBubble(
+                            isUser = message.isUser,
+                            contentMarkdown = message.contentMarkdown,
+                            timeLabel = message.timeLabel,
                         )
+                        // Attach activity chips under the latest assistant turn only.
+                        val isLatestAssistant = !message.isUser && message.id == state.messages.lastOrNull { !it.isUser }?.id
+                        if (isLatestAssistant) {
+                            TurnActivitySummary(
+                                chips = state.activityChips,
+                                changeCount = state.changeCount,
+                                onOpenTools = onOpenToolsSheet,
+                                onOpenReads = onOpenReadsSheet,
+                                onOpenChanges = onOpenChangesSheet,
+                                modifier = Modifier.padding(end = 48.dp),
+                            )
+                        }
                     }
                 }
             }

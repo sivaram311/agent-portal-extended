@@ -7,15 +7,15 @@
 
 | Field | Value |
 |-------|-------|
-| versionName | `0.4.1-tool-noise-fix-dev` · versionCode **11** |
-| APK SHA-256 | `3692BA0750674E5CA64DE48F18908383C2F5BD44AC99549B0FDFB77A30475E44` |
+| versionName | `0.4.2-prompt-timeout-auth-status-dev` · versionCode **12** |
+| APK SHA-256 | `4182E9F1A4670AB47462DFDB9A6D3C0FAF8AA2068EEE73136F89D59D451E22FF` |
 
-## v0.4.1 — tool noise fix
+## v0.4.2 — prompt timeout + auth status
 
-- Turn-scoped activity (since last user message), not session-wide “176 tools”
-- Categorize reads / edits / shells; primary chip hides pure reads
-- Separate “Read N files” chip; timeline groups with reads collapsed by default
-- Filter subagents, generic `tool`, `task-*.log`, abandoned; dedupe by toolCallId
-- Backend (agent-portal): skip ACP tool updates without `toolCallId` (no random UUID inflation)
+- REST OkHttp read/call timeouts raised (5m/6m) so `/prompt` ACP handshake no longer dies at 10s → nginx 499
+- Dedicated WebSocket OkHttp client (readTimeout 0 + pingInterval) + STOMP heartbeats + auto-reconnect
+- Chat re-subscribes via `flatMapLatest` on CONNECTED; Room refresh no longer wipes live streaming buffer
+- User-facing errors prefer backend `error` body (e.g. “Session already has an active run”)
+- Connection status strip on Sessions + Chat: Password/SSO, subject, token TTL, refresh, auth host, Live/Connecting/Offline (tap to expand)
 
-Session: 2026-07-28.
+Session: 2026-07-29.

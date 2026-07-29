@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import buzz.delena.agentportal.core.data.AuthRepository
 import buzz.delena.agentportal.core.data.SessionRepository
 import buzz.delena.agentportal.core.data.local.MessageEntity
 import buzz.delena.agentportal.core.network.ConnectionState
@@ -11,8 +12,10 @@ import buzz.delena.agentportal.core.network.NetworkModule
 import buzz.delena.agentportal.core.network.StompWebSocketClient
 import buzz.delena.agentportal.core.network.dto.FileChangeDto
 import buzz.delena.agentportal.core.network.dto.PermissionStatus
+import buzz.delena.agentportal.core.network.userFacingErrorMessage
 import buzz.delena.agentportal.notifications.PermissionApprovalNotifier
 import buzz.delena.agentportal.ui.activity.ToolActivity
+import buzz.delena.agentportal.ui.components.ConnectionStatusUi
 import buzz.delena.agentportal.ui.components.countDiffLines
 import buzz.delena.agentportal.ui.screens.ChatMessageItem
 import buzz.delena.agentportal.ui.screens.ChatSheet
@@ -20,9 +23,14 @@ import buzz.delena.agentportal.ui.screens.ChatUiState
 import buzz.delena.agentportal.ui.screens.FileChangeItem
 import buzz.delena.agentportal.ui.screens.PendingPermissionItem
 import buzz.delena.agentportal.ui.screens.ToolStepItem
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -40,12 +48,18 @@ class ChatViewModel(
     private val sessionId: String,
     initialTitle: String,
     private val sessionRepository: SessionRepository,
+    private val authRepository: AuthRepository,
     private val stompClient: StompWebSocketClient,
     private val appContext: Context,
     private val onArchived: () -> Unit = {},
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(ChatUiState(sessionTitle = initialTitle))
+    private val _state = MutableStateFlow(
+        ChatUiState(
+            sessionTitle = initialTitle,
+            connectionStatus = ConnectionStatusUi.from(authRepository.authSessionInfo()),
+        ),
+    )
     val state: StateFlow<ChatUiState> = _state.asStateFlow()
 
     private var streamingMessageId: String? = null
@@ -54,9 +68,21 @@ class ChatViewModel(
     init {
         viewModelScope.launch {
             sessionRepository.observeMessages(sessionId).collect { entities ->
-                val items = entities.map { it.toItem() }
-                _state.value = _state.value.copy(messages = items)
-                refreshActivity(messages = items)
+                val roomItems = entities.map { it.toItem() }
+                val streamingId = streamingMessageId
+                val merged = if (streamingId != null && streamingBuffer.isNotEmpty()) {
+                    val withoutStaleStream = roomItems.filterNot { it.id == streamingId }
+                    withoutStaleStream + ChatMessageItem(
+                        id = streamingId,
+                        isUser = false,
+                        contentMarkdown = streamingBuffer.toString(),
+                        timeLabel = "now",
+                    )
+                } else {
+                    roomItems
+                }
+                _state.value = _state.value.copy(messages = merged)
+                refreshActivity(messages = merged)
             }
         }
         refresh()
@@ -64,12 +90,39 @@ class ChatViewModel(
         stompClient.connect()
         viewModelScope.launch {
             stompClient.connectionState.collect { connectionState ->
-                if (connectionState == ConnectionState.CONNECTED) {
-                    stompClient.subscribeToSession(sessionId).collect { event ->
-                        handleStompEvent(event.bodyJson)
+                _state.value = _state.value.copy(
+                    realtimeState = connectionState,
+                    connectionStatus = ConnectionStatusUi.from(
+                        authRepository.authSessionInfo(),
+                        connectionState,
+                    ),
+                )
+            }
+        }
+        viewModelScope.launch {
+            while (isActive) {
+                delay(15_000)
+                _state.value = _state.value.copy(
+                    connectionStatus = ConnectionStatusUi.from(
+                        authRepository.authSessionInfo(),
+                        _state.value.realtimeState,
+                    ),
+                )
+            }
+        }
+        viewModelScope.launch {
+            @OptIn(ExperimentalCoroutinesApi::class)
+            stompClient.connectionState
+                .flatMapLatest { connectionState ->
+                    if (connectionState == ConnectionState.CONNECTED) {
+                        stompClient.subscribeToSession(sessionId)
+                    } else {
+                        emptyFlow()
                     }
                 }
-            }
+                .collect { event ->
+                    handleStompEvent(event.bodyJson)
+                }
         }
     }
 
@@ -156,7 +209,7 @@ class ChatViewModel(
                     _state.value = _state.value.copy(
                         isSending = false,
                         promptDraft = prompt,
-                        error = errorMessage(t),
+                        error = userFacingErrorMessage(t),
                     )
                 }
         }
@@ -211,7 +264,7 @@ class ChatViewModel(
         viewModelScope.launch {
             sessionRepository.acceptChange(sessionId, path)
                 .onSuccess { refreshActivity() }
-                .onFailure { t -> _state.value = _state.value.copy(error = errorMessage(t)) }
+                .onFailure { t -> _state.value = _state.value.copy(error = userFacingErrorMessage(t)) }
         }
     }
 
@@ -219,7 +272,7 @@ class ChatViewModel(
         viewModelScope.launch {
             sessionRepository.rejectChange(sessionId, path)
                 .onSuccess { refreshActivity() }
-                .onFailure { t -> _state.value = _state.value.copy(error = errorMessage(t)) }
+                .onFailure { t -> _state.value = _state.value.copy(error = userFacingErrorMessage(t)) }
         }
     }
 
@@ -233,7 +286,7 @@ class ChatViewModel(
         viewModelScope.launch {
             sessionRepository.cancelSession(sessionId)
                 .onSuccess { refresh() }
-                .onFailure { t -> _state.value = _state.value.copy(error = errorMessage(t)) }
+                .onFailure { t -> _state.value = _state.value.copy(error = userFacingErrorMessage(t)) }
         }
     }
 
@@ -241,7 +294,7 @@ class ChatViewModel(
         viewModelScope.launch {
             sessionRepository.archiveSession(sessionId)
                 .onSuccess { onArchived() }
-                .onFailure { t -> _state.value = _state.value.copy(error = errorMessage(t)) }
+                .onFailure { t -> _state.value = _state.value.copy(error = userFacingErrorMessage(t)) }
         }
     }
 
@@ -258,19 +311,8 @@ class ChatViewModel(
                     refresh()
                 }
                 .onFailure { t ->
-                    _state.value = _state.value.copy(error = errorMessage(t))
+                    _state.value = _state.value.copy(error = userFacingErrorMessage(t))
                 }
-        }
-    }
-
-    private fun errorMessage(t: Throwable): String {
-        val httpCode = (t as? retrofit2.HttpException)?.code()
-        return when {
-            httpCode == 401 || httpCode == 403 ->
-                "Your session expired and couldn't be refreshed — please sign in again."
-            httpCode != null -> "Server error ($httpCode). Please try again."
-            else -> t.message?.takeIf { it.isNotBlank() }
-                ?: "Couldn't reach the server. Check your connection and try again."
         }
     }
 
@@ -393,6 +435,7 @@ class ChatViewModel(
         private val sessionId: String,
         private val initialTitle: String,
         private val sessionRepository: SessionRepository,
+        private val authRepository: AuthRepository,
         private val stompClient: StompWebSocketClient,
         private val appContext: Context,
         private val onArchived: () -> Unit = {},
@@ -403,6 +446,7 @@ class ChatViewModel(
                 sessionId,
                 initialTitle,
                 sessionRepository,
+                authRepository,
                 stompClient,
                 appContext,
                 onArchived,

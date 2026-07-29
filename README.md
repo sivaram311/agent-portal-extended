@@ -4,12 +4,15 @@ Native Android client (and future extended-features surface) for **[Agent Portal
 
 This is a **separate repo** from `agent-portal` itself: `https://github.com/sivaram311/agent-portal-extended` (public). It talks to the existing Agent Portal REST/WebSocket API; it does not fork or duplicate the backend.
 
-**Status:** `v0.4.1-tool-noise-fix-dev` (versionCode 11). Turn-scoped activity chips (not session-wide 176 tools); reads collapsed; backend skips tool updates without ids.
+**Status:** `v0.4.2-prompt-timeout-auth-status-dev` (versionCode 12). Prompt no longer dies at OkHttp’s 10s default; WS heartbeats/reconnect; auth/connection status strip (Password vs SSO + token TTL + Live).
 
 ## Features
 
 Built:
 
+- **Connection status strip** — Sessions + Chat show Password/SSO (persisted at login), JWT subject, access-token TTL, refresh readiness, auth host; Chat also shows Live / Connecting / Offline (tap to expand)
+- **Prompt-safe timeouts** — REST read 5m / call 6m so ACP handshake on `POST /prompt` does not abort as nginx 499
+- **STOMP keep-alive** — client heartbeats + OkHttp WS pings + auto-reconnect with backoff; resubscribe on reconnect
 - **Claude-style thread** — collapsible “Ran N tools / files changed” chips; Activity timeline sheet; tool detail (monospace + line numbers + Raw/Render); Changes sheet with green/red diff + Keep/Restore; thumb-zone composer (Auto / attach / mic)
 - **Happy-path supervisor loop** — All / Needs you / Running / Failed filters; thin create (Cursor|Antigravity + demo); Decision bottom sheet; Cancel/Archive; notification tap → Chat
 - Compose UI — login screen, session list, chat/transcript screen with a Claude-app-like UX, styled in Agent Portal's own **navy/teal** branding (not Anthropic's)
@@ -20,7 +23,7 @@ Built:
 - Password-lane login, session list, and chat wired end-to-end (ViewModels + nav graph), **verified against a live DEV backend** (login → JWT → authenticated session list/chat, all `200`) **and on a real device**
 - Real per-token chat streaming — `ChatViewModel` parses the backend's actual STOMP event schema (`assistant_delta`/`thinking_delta`, the same source the web frontend's streaming reads) and appends text live, no more waiting for a full response before anything appears
 - Chat input bar keyboard handling (`imePadding()` on the input container) — the input field no longer sits behind the keyboard when typing
-- Access-token refresh — real fix for "the app stops responding after a while," on the **second** attempt: the first version relied on OkHttp's `Authenticator`, which only auto-fires on HTTP `401`, but this backend returns `403` for every auth failure (confirmed directly against the live server) — that version passed review and shipped without ever once firing. Now a plain `Interceptor` (triggers on any status code) handles the REST side, and `StompWebSocketClient` retries its own handshake on a 403 directly, since a WebSocket upgrade doesn't go through the interceptor retry path the same way. Refresh itself verified directly against the live auth server (`POST /auth/refresh` → real `200` + fresh token) before any Android code was written. Any remaining send/decide-permission failure shows a dismissible error banner instead of failing invisibly
+- Access-token refresh — real fix for "the app stops responding after a while," on the **second** attempt: the first version relied on OkHttp's `Authenticator`, which only auto-fires on HTTP `401`, but this backend returns `403` for every auth failure (confirmed directly against the live server) — that version passed review and shipped without ever once firing. Now a plain `Interceptor` (triggers on any status code) handles the REST side, and `StompWebSocketClient` retries its own handshake on a 403 directly, since a WebSocket upgrade doesn't go through the interceptor retry path the same way. Refresh itself verified directly against the live auth server (`POST /auth/refresh` → real `200` + fresh token) before any Android code was written. Any remaining send/decide-permission failure shows a dismissible error banner instead of failing invisibly — including the backend's real `error` string when present
 - Biometric / device-credential app-lock (`AppLockGate`) gating the app when a session is stored — fails open with a visible warning if the device has neither configured
 - Inline notification-action permission approval — Approve/Reject a pending tool-permission request straight from a system notification, works today for foreground/backgrounded-but-alive app process
 - Backend `POST/DELETE /api/devices` device-token registration + `PushNotificationService`, verified end-to-end on DEV

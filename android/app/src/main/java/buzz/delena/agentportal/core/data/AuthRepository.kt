@@ -42,6 +42,7 @@ class AuthRepository(
     suspend fun completeSsoLogin(tokenResponse: OAuthTokenResponse): Result<Unit> {
         return try {
             tokenStore.saveTokens(tokenResponse.accessToken, tokenResponse.refreshToken)
+            tokenStore.saveAuthMethod(AuthMethod.SSO)
             Result.success(Unit)
         } catch (t: Throwable) {
             Result.failure(t)
@@ -66,6 +67,7 @@ class AuthRepository(
                 ),
             )
             tokenStore.saveTokens(response.accessToken, response.refreshToken)
+            tokenStore.saveAuthMethod(AuthMethod.PASSWORD)
             Result.success(Unit)
         } catch (t: Throwable) {
             Result.failure(t)
@@ -73,6 +75,8 @@ class AuthRepository(
     }
 
     fun isLoggedIn(): Boolean = tokenStore.hasAccessToken()
+
+    fun authSessionInfo(): AuthSessionInfo = AuthSessionInfo.from(tokenStore)
 
     fun logout() {
         tokenStore.clear()

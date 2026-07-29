@@ -17,8 +17,8 @@ android {
         applicationId = "buzz.delena.agentportal"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.4.1-tool-noise-fix-dev"
+        versionCode = 12
+        versionName = "0.4.2-prompt-timeout-auth-status-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Default DEV backend; overridable per build without code changes.

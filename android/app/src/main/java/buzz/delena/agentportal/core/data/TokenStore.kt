@@ -41,6 +41,15 @@ class TokenStore(context: Context) {
         editor.apply()
     }
 
+    fun saveAuthMethod(method: AuthMethod) {
+        prefs.edit().putString(KEY_AUTH_METHOD, method.name).apply()
+    }
+
+    fun getAuthMethod(): AuthMethod {
+        val raw = prefs.getString(KEY_AUTH_METHOD, null) ?: return AuthMethod.UNKNOWN
+        return runCatching { AuthMethod.valueOf(raw) }.getOrDefault(AuthMethod.UNKNOWN)
+    }
+
     // Cached alongside the tokens so a background token-refresh (which has no
     // Activity/ViewModel context to re-fetch /api/auth/config from) knows
     // where to POST the refresh request. Saved every time getAuthConfig()
@@ -70,5 +79,6 @@ class TokenStore(context: Context) {
         const val KEY_AUTH_URL = "auth_url"
         const val KEY_REFRESH_PATH = "refresh_path"
         const val KEY_CLIENT_ID = "client_id"
+        const val KEY_AUTH_METHOD = "auth_method"
     }
 }

@@ -18,6 +18,7 @@ Prioritized tracks for the native Android client (and future extended-features s
 | **P0 happy path** | Sessions → Chat → Decision → stream → archive | Done `v0.3.0` |
 | **P0 Claude thread** | In-thread activity chips + bottom sheets | Done `v0.4.0` |
 | **P0 tool noise** | Turn-scope + categorize + filter + no random toolCallId | **Done `v0.4.1-tool-noise-fix-dev`** |
+| **P0 prompt/WS** | Long REST timeouts + STOMP heartbeat/reconnect + auth status strip | **Done `v0.4.2-prompt-timeout-auth-status-dev`** |
 | P2 | Firebase Cloud Messaging on-device proof | Code live; arrival unverified |
 | P2 | Device Lab E2E on Realme P2 Pro | Blocked — no ADB |
 

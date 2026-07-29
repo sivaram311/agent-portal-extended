@@ -43,6 +43,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import buzz.delena.agentportal.theme.AgentPortalTheme
 import buzz.delena.agentportal.theme.ApColors
+import buzz.delena.agentportal.ui.components.ConnectionStatusBar
+import buzz.delena.agentportal.ui.components.ConnectionStatusUi
 import buzz.delena.agentportal.ui.components.SessionCard
 import buzz.delena.agentportal.ui.components.SessionCardData
 import buzz.delena.agentportal.ui.viewmodel.SessionListFilter
@@ -64,6 +66,7 @@ data class SessionListUiState(
     val isRefreshing: Boolean = false,
     val isCreating: Boolean = false,
     val error: String? = null,
+    val connectionStatus: ConnectionStatusUi? = null,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,6 +80,7 @@ fun SessionListScreen(
     onDismissError: () -> Unit,
 ) {
     var showCreateSheet by remember { mutableStateOf(false) }
+    var connectionExpanded by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     Scaffold(
@@ -114,6 +118,13 @@ fun SessionListScreen(
                 .padding(padding),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
+                state.connectionStatus?.let { status ->
+                    ConnectionStatusBar(
+                        status = status,
+                        expanded = connectionExpanded,
+                        onToggle = { connectionExpanded = !connectionExpanded },
+                    )
+                }
                 FilterRow(
                     selected = state.filter,
                     onFilterChange = onFilterChange,

@@ -9,6 +9,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import java.util.concurrent.TimeUnit
 
 /**
  * Manual composition root for the networking stack. There is no DI
@@ -58,16 +59,35 @@ object NetworkModule {
     }
 
     /**
-     * Client used for this app's own backend -- attaches the bearer token,
-     * and on a 403 (access token expired, 15min TTL -- this backend never
-     * returns 401 for auth failures, see TokenAuthenticator's own doc
-     * comment) transparently refreshes and retries once.
+     * REST client for Agent Portal. Prompt/create can block on ACP handshake
+     * for tens of seconds before any response bytes arrive — OkHttp's default
+     * 10s read timeout aborted those calls (nginx 499) and left the session
+     * stuck "already has an active run" for retries.
      */
     fun provideOkHttpClient(tokenStore: TokenStore): OkHttpClient {
         return OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(5, TimeUnit.MINUTES)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(6, TimeUnit.MINUTES)
             .addInterceptor(authInterceptor(tokenStore))
             .addInterceptor(TokenAuthenticator(tokenStore))
             .addInterceptor(loggingInterceptor())
+            .build()
+    }
+
+    /**
+     * WebSocket client: auth is via `access_token` query param (not the
+     * Bearer interceptor). Read timeout must be 0 so idle STOMP connections
+     * aren't killed between heartbeats; OkHttp ping keeps Cloudflare/nginx
+     * from dropping the upgrade.
+     */
+    fun provideWebSocketOkHttpClient(): OkHttpClient {
+        return OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(0, TimeUnit.MILLISECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .pingInterval(20, TimeUnit.SECONDS)
             .build()
     }
 
@@ -99,6 +119,9 @@ object NetworkModule {
      */
     fun provideAuthApi(): AuthApi {
         val client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
             .addInterceptor(loggingInterceptor())
             .build()
         val retrofit = Retrofit.Builder()

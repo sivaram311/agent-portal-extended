@@ -20,7 +20,6 @@ class AppContainer(context: Context) {
 
     private val agentPortalApi = NetworkModule.provideAgentPortalApi(tokenStore)
     private val authApi = NetworkModule.provideAuthApi()
-    private val okHttpClient = NetworkModule.provideOkHttpClient(tokenStore)
     val deviceApi = NetworkModule.provideDeviceApi(tokenStore)
 
     private val database = AppDatabase.getInstance(context)
@@ -28,8 +27,10 @@ class AppContainer(context: Context) {
     val authRepository = AuthRepository(agentPortalApi, authApi, tokenStore)
     val sessionRepository = SessionRepository(agentPortalApi, database.sessionDao(), database.messageDao())
 
+    // Separate OkHttp client for WS: infinite read timeout + protocol pings.
+    // REST keeps long (but finite) timeouts for ACP handshake on /prompt.
     val stompClient = StompWebSocketClient(
-        okHttpClient = okHttpClient,
+        okHttpClient = NetworkModule.provideWebSocketOkHttpClient(),
         wsBaseUrl = BuildConfig.WS_BASE_URL,
         tokenStore = tokenStore,
     )

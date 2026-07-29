@@ -82,7 +82,10 @@ fun AgentPortalNavHost(
 
         composable(Routes.SESSION_LIST) {
             val viewModel: SessionListViewModel = viewModel(
-                factory = SessionListViewModel.Factory(container.sessionRepository),
+                factory = SessionListViewModel.Factory(
+                    container.sessionRepository,
+                    container.authRepository,
+                ),
             )
             val state by viewModel.state.collectAsState()
             SessionListScreen(
@@ -112,6 +115,7 @@ fun AgentPortalNavHost(
                     sessionId = sessionId,
                     initialTitle = "",
                     sessionRepository = container.sessionRepository,
+                    authRepository = container.authRepository,
                     stompClient = container.stompClient,
                     appContext = LocalContext.current.applicationContext,
                     onArchived = {

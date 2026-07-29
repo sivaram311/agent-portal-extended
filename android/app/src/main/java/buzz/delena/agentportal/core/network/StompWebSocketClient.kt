@@ -2,6 +2,11 @@ package buzz.delena.agentportal.core.network
 
 import buzz.delena.agentportal.core.data.TokenStore
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -42,6 +47,10 @@ private data class RawStompFrame(
  * Auth: the access token is appended as an "access_token" query parameter
  * on the connect URL, matching the backend's documented pattern for its
  * SockJS-registered endpoints.
+ *
+ * Keeps the socket alive with STOMP heartbeats (client → server newlines)
+ * plus OkHttp WebSocket pings, and auto-reconnects while [connect] has been
+ * requested and [disconnect] has not.
  */
 class StompWebSocketClient(
     private val okHttpClient: OkHttpClient,
@@ -55,17 +64,28 @@ class StompWebSocketClient(
     private var webSocket: WebSocket? = null
     private val subscriptionCounter = AtomicInteger(0)
     private val messageListeners = CopyOnWriteArrayList<(StompEvent) -> Unit>()
+    private val wantConnected = AtomicBoolean(false)
+    private val reconnectAttempt = AtomicInteger(0)
+    private val scheduler: ScheduledExecutorService =
+        Executors.newSingleThreadScheduledExecutor { r ->
+            Thread(r, "stomp-heartbeat").apply { isDaemon = true }
+        }
+    private var heartbeatFuture: ScheduledFuture<*>? = null
+    private var reconnectFuture: ScheduledFuture<*>? = null
 
     fun connect() {
+        wantConnected.set(true)
         connectInternal(allowAuthRetry = true)
     }
 
     private fun connectInternal(allowAuthRetry: Boolean) {
+        if (!wantConnected.get()) return
         if (_connectionState.value == ConnectionState.CONNECTING ||
             _connectionState.value == ConnectionState.CONNECTED
         ) {
             return
         }
+        cancelReconnect()
         _connectionState.value = ConnectionState.CONNECTING
 
         val request = buildConnectRequest()
@@ -81,10 +101,13 @@ class StompWebSocketClient(
                 }
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                    stopHeartbeat()
                     _connectionState.value = ConnectionState.DISCONNECTED
+                    scheduleReconnectIfWanted()
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    stopHeartbeat()
                     // This backend returns 403 (never 401) for an expired or
                     // missing access token, including on the WS upgrade
                     // request itself (confirmed directly against the live
@@ -118,6 +141,7 @@ class StompWebSocketClient(
                         }
                     }
                     _connectionState.value = ConnectionState.FAILED
+                    scheduleReconnectIfWanted()
                 }
             },
         )
@@ -140,8 +164,9 @@ class StompWebSocketClient(
     /**
      * Subscribes to "/topic/sessions/{sessionId}" and emits every MESSAGE
      * frame received for it. Callers should generally wait for
-     * connectionState to reach CONNECTED before subscribing; this skeleton
-     * does not queue subscriptions sent before the CONNECTED frame arrives.
+     * connectionState to reach CONNECTED before collecting; use
+     * flatMapLatest on connectionState so a drop cancels this flow and a
+     * later CONNECTED re-subscribes.
      */
     fun subscribeToSession(sessionId: String): Flow<StompEvent> = callbackFlow {
         val destination = "/topic/sessions/$sessionId"
@@ -161,15 +186,59 @@ class StompWebSocketClient(
     }
 
     fun disconnect() {
-        webSocket?.send("DISCONNECT\n\n$NUL")
+        wantConnected.set(false)
+        cancelReconnect()
+        stopHeartbeat()
+        reconnectAttempt.set(0)
+        runCatching { webSocket?.send("DISCONNECT\n\n$NUL") }
         webSocket?.close(NORMAL_CLOSURE_CODE, "client_disconnect")
         webSocket = null
         _connectionState.value = ConnectionState.DISCONNECTED
     }
 
+    private fun scheduleReconnectIfWanted() {
+        if (!wantConnected.get()) return
+        cancelReconnect()
+        val attempt = reconnectAttempt.incrementAndGet().coerceAtMost(6)
+        val delaySec = (1L shl (attempt - 1)).coerceAtMost(30L)
+        reconnectFuture = scheduler.schedule({
+            if (!wantConnected.get()) return@schedule
+            if (_connectionState.value == ConnectionState.CONNECTED ||
+                _connectionState.value == ConnectionState.CONNECTING
+            ) {
+                return@schedule
+            }
+            _connectionState.value = ConnectionState.DISCONNECTED
+            connectInternal(allowAuthRetry = true)
+        }, delaySec, TimeUnit.SECONDS)
+    }
+
+    private fun cancelReconnect() {
+        reconnectFuture?.cancel(false)
+        reconnectFuture = null
+    }
+
+    private fun startHeartbeat(clientSendMs: Long) {
+        stopHeartbeat()
+        if (clientSendMs <= 0L) return
+        val interval = clientSendMs.coerceAtLeast(5_000L)
+        heartbeatFuture = scheduler.scheduleAtFixedRate({
+            val socket = webSocket ?: return@scheduleAtFixedRate
+            if (_connectionState.value != ConnectionState.CONNECTED) return@scheduleAtFixedRate
+            // STOMP heartbeat: a single LF (or NUL-terminated empty frame).
+            socket.send("\n")
+        }, interval, interval, TimeUnit.MILLISECONDS)
+    }
+
+    private fun stopHeartbeat() {
+        heartbeatFuture?.cancel(false)
+        heartbeatFuture = null
+    }
+
     private fun handleIncoming(rawText: String) {
         // Frames may arrive batched/concatenated in one WebSocket text
-        // frame; split on the NUL terminator first.
+        // frame; split on the NUL terminator first. Pure heartbeat LFs
+        // produce empty pieces after split/trim and are ignored.
         rawText.split(NUL)
             .map { it.trim('\n', '\r') }
             .filter { it.isNotEmpty() }
@@ -178,15 +247,32 @@ class StompWebSocketClient(
 
     private fun dispatch(frame: RawStompFrame) {
         when (frame.command) {
-            "CONNECTED" -> _connectionState.value = ConnectionState.CONNECTED
+            "CONNECTED" -> {
+                reconnectAttempt.set(0)
+                _connectionState.value = ConnectionState.CONNECTED
+                val heartBeat = frame.headers["heart-beat"] ?: frame.headers["heartbeat"]
+                val clientSendMs = parseClientSendHeartbeatMs(heartBeat)
+                startHeartbeat(clientSendMs)
+            }
             "MESSAGE" -> {
                 val destination = frame.headers["destination"] ?: return
                 val event = StompEvent(destination, frame.body)
                 messageListeners.forEach { it(event) }
             }
-            "ERROR" -> _connectionState.value = ConnectionState.FAILED
+            "ERROR" -> {
+                stopHeartbeat()
+                _connectionState.value = ConnectionState.FAILED
+                scheduleReconnectIfWanted()
+            }
             else -> Unit
         }
+    }
+
+    /** STOMP heart-beat header is "cx,cy" — client send interval, server send interval (ms). */
+    private fun parseClientSendHeartbeatMs(header: String?): Long {
+        if (header.isNullOrBlank()) return DEFAULT_CLIENT_HEARTBEAT_MS
+        val clientPart = header.split(',').firstOrNull()?.trim()?.toLongOrNull() ?: return DEFAULT_CLIENT_HEARTBEAT_MS
+        return if (clientPart <= 0L) DEFAULT_CLIENT_HEARTBEAT_MS else clientPart
     }
 
     private fun parseFrame(rawFrame: String): RawStompFrame? {
@@ -223,5 +309,6 @@ class StompWebSocketClient(
         val NUL: Char = Char.MIN_VALUE
         val CONNECT_FRAME = "CONNECT\naccept-version:1.2\nheart-beat:10000,10000\n\n$NUL"
         const val NORMAL_CLOSURE_CODE = 1000
+        const val DEFAULT_CLIENT_HEARTBEAT_MS = 10_000L
     }
 }
