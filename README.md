@@ -4,7 +4,7 @@ Native Android client (and future extended-features surface) for **[Agent Portal
 
 This is a **separate repo** from `agent-portal` itself: `https://github.com/sivaram311/agent-portal-extended` (public). It talks to the existing Agent Portal REST/WebSocket API; it does not fork or duplicate the backend.
 
-**Status:** `v0.4.4-sso-session-fix-dev` (versionCode 14). SSO Custom Tabs package-visibility fix; stop wiping tokens on transient refresh failures (false â€œsession expiredâ€ while TTL still showed ~14m).
+**Status:** `v0.4.5-android-rate-limit-exempt-dev` (versionCode 15). Android sends `X-Agent-Portal-Client: android` (unlimited on DEV portal); prior: SSO Custom Tabs + false session-expiry fixes in v0.4.4.
 
 ## Features
 
