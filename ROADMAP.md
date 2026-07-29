@@ -10,7 +10,7 @@ Prioritized tracks for the native Android client (and future extended-features s
 | P0 | Network/data layer — Retrofit/OkHttp/Room/STOMP | Done |
 | P0 | ViewModels wiring UI to data layer (AuthViewModel, SessionListViewModel, ChatViewModel) + nav graph | Done |
 | P1 | Password-lane login wired end-to-end | **Done, verified on a real device** (Realme P2 Pro) |
-| P1 | OAuth/PKCE SSO via Custom Tabs + AppAuth-Android | Built, **not live** — needs css-next Q1/Q2 promote for redirect allow-list |
+| P1 | OAuth/PKCE SSO via Custom Tabs + AppAuth-Android | **v0.4.4** — css-next allow-list live; Android `<queries>` so Custom Tabs open |
 | P1 | Realtime chat wired to STOMP client | **Done** — live `assistant_delta` typewriter |
 | P1 | Chat input bar keyboard handling | **Done** — `imePadding()` |
 | P1 | Access-token refresh + error surfacing | **Done** (`v0.2.6`) — 403-triggered interceptor + WS handshake retry |
@@ -18,7 +18,9 @@ Prioritized tracks for the native Android client (and future extended-features s
 | **P0 happy path** | Sessions → Chat → Decision → stream → archive | Done `v0.3.0` |
 | **P0 Claude thread** | In-thread activity chips + bottom sheets | Done `v0.4.0` |
 | **P0 tool noise** | Turn-scope + categorize + filter + no random toolCallId | **Done `v0.4.1-tool-noise-fix-dev`** |
-| **P0 prompt/WS** | Long REST timeouts + STOMP heartbeat/reconnect + auth status strip | **Done `v0.4.2-prompt-timeout-auth-status-dev`** |
+| **P0 prompt/WS** | Long REST timeouts + STOMP heartbeat/reconnect + auth status strip | **Done `v0.4.2`** |
+| **P0 account** | Manage sheet: Reconnect + Sign out; Unknown ≠ red | **Done `v0.4.3-reconnect-logout-dev`** |
+| **P0 SSO/session** | SSO opens + no false “expired” while JWT TTL left | **Done `v0.4.4-sso-session-fix-dev`** |
 | P2 | Firebase Cloud Messaging on-device proof | Code live; arrival unverified |
 | P2 | Device Lab E2E on Realme P2 Pro | Blocked — no ADB |
 

@@ -5,6 +5,22 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
+    <!-- Android 11+ package visibility: without these, AppAuth cannot discover
+         Custom Tabs / browsers and "Sign in with SSO" appears to do nothing. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+        <intent>
+            <action android:name="androidx.browser.customtabs.action.CustomTabsService" />
+        </intent>
+    </queries>
+
     <application
         android:name=".AgentPortalApplication"
         android:allowBackup="false"

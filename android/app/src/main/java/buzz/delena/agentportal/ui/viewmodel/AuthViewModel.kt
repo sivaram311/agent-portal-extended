@@ -53,10 +53,11 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
 
     // Cached between startSsoLogin's launch and completeSsoLogin's redirect
     // handling so the token exchange can supply the matching PKCE
-    // code_verifier and validate the returned state. AppAuth's own
-    // AuthorizationService needs a Context it does not own long-term, so it
-    // is created per-call below rather than kept as a field.
+    // code_verifier and validate the returned state. AuthorizationService is
+    // kept until the Custom Tab finishes (disposing immediately cancels the
+    // browser warm-up and can make SSO appear to do nothing).
     private var pendingAuthRequest: AuthorizationRequest? = null
+    private var authorizationService: AuthorizationService? = null
 
     fun onUsernameChange(value: String) {
         _state.value = _state.value.copy(username = value, error = null)
@@ -114,22 +115,45 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
                     clientId,
                     ResponseTypeValues.CODE,
                     Uri.parse(OAUTH_REDIRECT_URI),
-                ).build()
+                )
+                    .setScopes("openid")
+                    .build()
                 pendingAuthRequest = request
 
+                authorizationService?.dispose()
                 val authService = AuthorizationService(context)
-                val intent = authService.getAuthorizationRequestIntent(request)
-                authService.dispose()
+                authorizationService = authService
+                val intent = try {
+                    authService.getAuthorizationRequestIntent(request)
+                } catch (t: Throwable) {
+                    authorizationService?.dispose()
+                    authorizationService = null
+                    throw IllegalStateException(
+                        "No browser available for SSO. Install Chrome (or any browser) and try again.",
+                        t,
+                    )
+                }
 
                 _state.value = _state.value.copy(isLoading = false)
-                onReady(intent)
+                withContext(Dispatchers.Main.immediate) {
+                    onReady(intent)
+                }
             } catch (t: Throwable) {
+                authorizationService?.dispose()
+                authorizationService = null
+                pendingAuthRequest = null
                 _state.value = _state.value.copy(
                     isLoading = false,
                     error = t.message ?: "Could not start SSO sign-in",
                 )
             }
         }
+    }
+
+    override fun onCleared() {
+        authorizationService?.dispose()
+        authorizationService = null
+        super.onCleared()
     }
 
     /**
@@ -155,6 +179,7 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
         val redirectUri = intent.data
         if (request == null || redirectUri == null) {
             pendingAuthRequest = null
+            disposeAuthService()
             _state.value = _state.value.copy(isLoading = false, error = "SSO sign-in was cancelled or incomplete")
             return
         }
@@ -162,6 +187,7 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
         val oauthError = redirectUri.getQueryParameter("error")
         if (oauthError != null) {
             pendingAuthRequest = null
+            disposeAuthService()
             val description = redirectUri.getQueryParameter("error_description")
             _state.value = _state.value.copy(isLoading = false, error = description ?: oauthError)
             return
@@ -171,17 +197,20 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
         val returnedState = redirectUri.getQueryParameter("state")
         if (code.isNullOrBlank()) {
             pendingAuthRequest = null
+            disposeAuthService()
             _state.value = _state.value.copy(isLoading = false, error = "SSO sign-in did not return an authorization code")
             return
         }
         if (returnedState != request.state) {
             pendingAuthRequest = null
+            disposeAuthService()
             _state.value = _state.value.copy(isLoading = false, error = "SSO sign-in failed (state mismatch)")
             return
         }
         val codeVerifier = request.codeVerifier
         if (codeVerifier == null) {
             pendingAuthRequest = null
+            disposeAuthService()
             _state.value = _state.value.copy(isLoading = false, error = "SSO sign-in failed (missing PKCE verifier)")
             return
         }
@@ -201,6 +230,7 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
                     codeVerifier = codeVerifier,
                 )
                 pendingAuthRequest = null
+                disposeAuthService()
 
                 authRepository.completeSsoLogin(tokenResponse).onSuccess {
                     _state.value = _state.value.copy(isLoading = false)
@@ -210,9 +240,15 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
                 }
             } catch (t: Throwable) {
                 pendingAuthRequest = null
+                disposeAuthService()
                 _state.value = _state.value.copy(isLoading = false, error = t.message ?: "SSO token exchange failed")
             }
         }
+    }
+
+    private fun disposeAuthService() {
+        authorizationService?.dispose()
+        authorizationService = null
     }
 
     // Deliberately not routed through AuthApi/AgentPortalApi or AppAuth's

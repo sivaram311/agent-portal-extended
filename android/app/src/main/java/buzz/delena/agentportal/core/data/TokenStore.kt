@@ -34,15 +34,17 @@ class TokenStore(context: Context) {
     fun hasAccessToken(): Boolean = !getAccessToken().isNullOrBlank()
 
     fun saveTokens(accessToken: String, refreshToken: String? = null) {
+        // commit() so TokenAuthenticator / WS refresh see the new token
+        // immediately (apply() is async and raced with the next 403 retry).
         val editor = prefs.edit().putString(KEY_ACCESS_TOKEN, accessToken)
         if (refreshToken != null) {
             editor.putString(KEY_REFRESH_TOKEN, refreshToken)
         }
-        editor.apply()
+        editor.commit()
     }
 
     fun saveAuthMethod(method: AuthMethod) {
-        prefs.edit().putString(KEY_AUTH_METHOD, method.name).apply()
+        prefs.edit().putString(KEY_AUTH_METHOD, method.name).commit()
     }
 
     fun getAuthMethod(): AuthMethod {
@@ -59,7 +61,7 @@ class TokenStore(context: Context) {
             .putString(KEY_AUTH_URL, authUrl)
             .putString(KEY_REFRESH_PATH, refreshPath)
             .putString(KEY_CLIENT_ID, clientId)
-            .apply()
+            .commit()
     }
 
     fun getAuthUrl(): String? = prefs.getString(KEY_AUTH_URL, null)
@@ -69,7 +71,7 @@ class TokenStore(context: Context) {
     fun getClientId(): String? = prefs.getString(KEY_CLIENT_ID, null)
 
     fun clear() {
-        prefs.edit().clear().apply()
+        prefs.edit().clear().commit()
     }
 
     private companion object {

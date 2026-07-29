@@ -33,30 +33,43 @@ private data class RefreshTokenRequest(
  */
 object TokenRefresher {
 
-    /** Returns true if a new access token was obtained and saved. */
+    private val lock = Any()
+
+    /**
+     * Returns true if a new access token was obtained and saved.
+     *
+     * [clearOnFailure] only clears storage when the auth server explicitly
+     * rejects the refresh (4xx). Transient network / 5xx failures leave
+     * tokens in place so a still-valid access JWT (e.g. ~14m left) is not
+     * wiped by a blip — that was showing as "session expired" while the
+     * status strip still said Token · 14m left.
+     */
     fun tryRefresh(tokenStore: TokenStore, clearOnFailure: Boolean = true): Boolean {
-        val refreshToken = tokenStore.getRefreshToken() ?: return false
-        val authUrl = tokenStore.getAuthUrl() ?: return false
-        val refreshPath = tokenStore.getRefreshPath() ?: return false
-        val clientId = tokenStore.getClientId() ?: return false
+        synchronized(lock) {
+            val refreshToken = tokenStore.getRefreshToken() ?: return false
+            val authUrl = tokenStore.getAuthUrl() ?: return false
+            val refreshPath = tokenStore.getRefreshPath() ?: return false
+            val clientId = tokenStore.getClientId() ?: return false
 
-        val newTokens = runCatching {
-            refreshSync(authUrl.trimEnd('/') + refreshPath, refreshToken, clientId)
-        }.getOrNull()
+            val result = runCatching {
+                refreshSync(authUrl.trimEnd('/') + refreshPath, refreshToken, clientId)
+            }
 
-        if (newTokens == null) {
-            // Automatic paths (REST 403 interceptor / WS handshake) clear so
-            // the next navigation lands on login. Manual "Reconnect" passes
-            // clearOnFailure=false so a transient network blip doesn't wipe
-            // the session — the UI can offer Sign out instead.
-            if (clearOnFailure) {
+            val newTokens = result.getOrNull()
+            if (newTokens != null) {
+                tokenStore.saveTokens(newTokens.accessToken, newTokens.refreshToken)
+                return true
+            }
+
+            val failure = result.exceptionOrNull()
+            val rejectedByServer = failure is RefreshRejectedException
+            // Automatic paths clear only on definitive auth rejection so a
+            // flaky network does not kick the user out while JWT TTL still shows.
+            if (clearOnFailure && rejectedByServer) {
                 tokenStore.clear()
             }
             return false
         }
-
-        tokenStore.saveTokens(newTokens.accessToken, newTokens.refreshToken)
-        return true
     }
 
     private fun refreshSync(refreshUrl: String, refreshToken: String, clientId: String): OAuthTokenResponse {
@@ -77,10 +90,15 @@ object TokenRefresher {
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val responseBody = stream?.bufferedReader(Charsets.UTF_8)?.use(BufferedReader::readText).orEmpty()
+            if (status in 400..499) {
+                throw RefreshRejectedException("Token refresh rejected ($status): $responseBody")
+            }
             check(status in 200..299) { "Token refresh failed ($status): $responseBody" }
             return NetworkModule.json.decodeFromString(OAuthTokenResponse.serializer(), responseBody)
         } finally {
             connection.disconnect()
         }
     }
+
+    private class RefreshRejectedException(message: String) : IllegalStateException(message)
 }

@@ -92,7 +92,18 @@ class SessionListViewModel(
         refresh()
         viewModelScope.launch {
             while (isActive) {
-                connectionStatus.value = ConnectionStatusUi.from(authRepository.authSessionInfo())
+                val info = authRepository.authSessionInfo()
+                connectionStatus.value = ConnectionStatusUi.from(info)
+                // Soft proactive refresh near expiry so the strip stays accurate
+                // and REST/WS don't hit a hard 403 mid-minute.
+                val secondsLeft = info.accessTokenExpiresInSeconds
+                if (info.hasRefreshToken &&
+                    secondsLeft != null &&
+                    secondsLeft in 1L..120L
+                ) {
+                    authRepository.reconnectSession()
+                    connectionStatus.value = ConnectionStatusUi.from(authRepository.authSessionInfo())
+                }
                 delay(15_000)
             }
         }

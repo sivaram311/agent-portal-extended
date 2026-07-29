@@ -4,7 +4,7 @@ Native Android client (and future extended-features surface) for **[Agent Portal
 
 This is a **separate repo** from `agent-portal` itself: `https://github.com/sivaram311/agent-portal-extended` (public). It talks to the existing Agent Portal REST/WebSocket API; it does not fork or duplicate the backend.
 
-**Status:** `v0.4.2-prompt-timeout-auth-status-dev` (versionCode 12). Prompt no longer dies at OkHttp’s 10s default; WS heartbeats/reconnect; auth/connection status strip (Password vs SSO + token TTL + Live).
+**Status:** `v0.4.4-sso-session-fix-dev` (versionCode 14). SSO Custom Tabs package-visibility fix; stop wiping tokens on transient refresh failures (false “session expired” while TTL still showed ~14m).
 
 ## Features
 
@@ -28,18 +28,17 @@ Built:
 - Inline notification-action permission approval — Approve/Reject a pending tool-permission request straight from a system notification, works today for foreground/backgrounded-but-alive app process
 - Backend `POST/DELETE /api/devices` device-token registration + `PushNotificationService`, verified end-to-end on DEV
 - Firebase Cloud Messaging — **live end-to-end**, both sides: Android registered/receiving (`AgentPortalFirebaseMessagingService`), backend `PushNotificationService` initializes the Admin SDK from a service-account key and really sends, with stale/unregistered tokens auto-removed. Verified with a real (non-mocked) send against Google's servers — a throwaway smoke test confirmed a genuine FCM-level rejection for a deliberately-invalid token, proving the credential authenticates correctly
-- OAuth/PKCE SSO via Custom Tabs + AppAuth-Android — **built but not functional against the live server yet**, see the caveat below
+- OAuth/PKCE SSO via Custom Tabs + AppAuth-Android — authorize URL + custom-scheme allow-list verified live on css-next; Android 11+ `<queries>` added in v0.4.4 so Custom Tabs can open
 
 Not yet done / explicitly deferred (see [ROADMAP.md](ROADMAP.md)):
 
-- OAuth/PKCE SSO live against css-next (needs promote)
+- Formal Device Lab E2E of SSO on Realme P2 Pro
 - A real push notification arriving on a real device (no ADB on this build host)
-- Formal Device Lab E2E on Realme P2 Pro
 - Full portal tabs (Logs/Code/Guidance) — out of happy-path scope
 
-## Known blocker: OAuth/PKCE SSO is not live yet
+## SSO notes
 
-SSO is fully implemented (AppAuth-Android PKCE flow, `AuthViewModel.startSsoLogin`/`completeSsoLogin`), including a fix to the auth server's redirect allow-list (`centralized-security-system`'s `OAuthService.isRedirectUriAllowed`) to accept this app's custom URL scheme. That fix exists only in **local DEV source** — the auth server the app actually talks to (`css-next.delena.buzz`) runs from `G:\apps\css-next\centralized-security-system.jar` (**PROD**, shared with other live apps). Making SSO work end-to-end needs a real Q1/Q2 promote of `centralized-security-system` (evidence pack, EM GO/NO-GO) per this machine's standing orders — not an ad-hoc restart. Password-lane login is unaffected and fully functional.
+Password login uses same-origin `https://delena.buzz/auth/*`. SSO opens `{issuer}/oauth/authorize` on `https://css-next.delena.buzz` (Custom Tabs) and returns via `buzz.delena.agentportal://oauth/callback`. css-next prod jar already allows that custom scheme. If SSO still does nothing, install/update Chrome (or any browser) — Android 11+ hides browsers from the app without the manifest `<queries>` block shipped in v0.4.4.
 
 ## Prerequisites
 

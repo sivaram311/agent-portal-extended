@@ -14,11 +14,12 @@ fun userFacingErrorMessage(t: Throwable): String {
         val bodyMessage = http.errorBodyMessage()
         return when (http.code()) {
             401, 403 -> bodyMessage
-                ?: "Your session expired and couldn't be refreshed — please sign in again."
+                ?: "Couldn't authorize this request. Pull to refresh, or use Manage → Reconnect. If that fails, sign in again."
             400 -> bodyMessage
                 ?: "Request rejected. If a run is already active, wait for it to finish or cancel it."
             408, 499 -> bodyMessage
                 ?: "The server took too long to start the agent. Check the session — it may still be running."
+            429 -> bodyMessage ?: "Too many requests — wait a moment and try again."
             in 500..599 -> bodyMessage ?: "Server error (${http.code()}). Please try again."
             else -> bodyMessage ?: "Server error (${http.code()}). Please try again."
         }

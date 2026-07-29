@@ -148,12 +148,12 @@ fun AppLockGate(hasSession: Boolean, content: @Composable () -> Unit) {
                             Text("Continue")
                         }
                     } else {
-                        Text(
-                            text = "Authenticate to view your agent sessions",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = ApColors.TextMuted,
-                            textAlign = TextAlign.Center,
-                        )
+                    Text(
+                        text = "App lock — your sign-in token is still saved. Authenticate to continue.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ApColors.TextMuted,
+                        textAlign = TextAlign.Center,
+                    )
                         Button(onClick = { launchPrompt() }) {
                             Text("Unlock")
                         }

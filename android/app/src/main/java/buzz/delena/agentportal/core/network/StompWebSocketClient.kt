@@ -122,7 +122,9 @@ class StompWebSocketClient(
                     // One refresh-and-reconnect attempt here closes that gap
                     // without the caller needing to know it happened.
                     if (allowAuthRetry && response?.code == 403 && tokenStore.getRefreshToken() != null) {
-                        val refreshed = TokenRefresher.tryRefresh(tokenStore)
+                        // Do not wipe a still-valid access JWT on a network blip
+                        // during refresh — same policy as TokenAuthenticator.
+                        val refreshed = TokenRefresher.tryRefresh(tokenStore, clearOnFailure = false)
                         if (refreshed) {
                             // connectInternal()'s own guard at the top only
                             // proceeds when state is DISCONNECTED/FAILED --

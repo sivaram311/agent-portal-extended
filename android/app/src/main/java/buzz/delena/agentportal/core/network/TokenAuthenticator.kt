@@ -1,5 +1,6 @@
 package buzz.delena.agentportal.core.network
 
+import buzz.delena.agentportal.core.data.AuthSessionInfo
 import buzz.delena.agentportal.core.data.TokenStore
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -37,7 +38,16 @@ class TokenAuthenticator(private val tokenStore: TokenStore) : Interceptor {
         }
 
         response.close()
-        val refreshed = TokenRefresher.tryRefresh(tokenStore)
+        // Only wipe storage when the access token is already expired/near-expiry
+        // and the auth server rejects refresh. If the JWT still has minutes left,
+        // a failed refresh is treated as transient (network) — do not clear.
+        val info = AuthSessionInfo.from(tokenStore)
+        val accessNearExpiry = info.accessTokenExpired ||
+            (info.accessTokenExpiresInSeconds != null && info.accessTokenExpiresInSeconds <= 120L)
+        val refreshed = TokenRefresher.tryRefresh(
+            tokenStore,
+            clearOnFailure = accessNearExpiry,
+        )
         if (!refreshed) {
             // Refresh failed -- re-issue the original request as-is so the
             // caller still gets a real (403) response to handle/surface,
