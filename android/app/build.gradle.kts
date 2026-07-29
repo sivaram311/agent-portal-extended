@@ -17,8 +17,8 @@ android {
         applicationId = "buzz.delena.agentportal"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
-        versionName = "0.4.4-sso-session-fix-dev"
+        versionCode = 15
+        versionName = "0.4.5-android-rate-limit-exempt-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Default DEV backend; overridable per build without code changes.

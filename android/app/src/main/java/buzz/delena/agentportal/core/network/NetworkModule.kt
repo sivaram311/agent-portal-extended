@@ -38,14 +38,14 @@ object NetworkModule {
         val skipAuth = unauthenticatedPathPrefixes.any { path.startsWith(it) }
         val token = tokenStore.getAccessToken()
 
-        val request = if (!skipAuth && !token.isNullOrBlank()) {
-            original.newBuilder()
-                .header("Authorization", "Bearer $token")
-                .build()
-        } else {
-            original
+        val builder = original.newBuilder()
+            // Lets Agent Portal RateLimitFilter exempt this native client
+            // (phone polling would otherwise hit the shared 120/min budget).
+            .header("X-Agent-Portal-Client", "android")
+        if (!skipAuth && !token.isNullOrBlank()) {
+            builder.header("Authorization", "Bearer $token")
         }
-        chain.proceed(request)
+        chain.proceed(builder.build())
     }
 
     private fun loggingInterceptor(): HttpLoggingInterceptor {
