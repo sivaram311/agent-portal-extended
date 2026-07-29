@@ -14,7 +14,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import buzz.delena.agentportal.AgentPortalApplication
-import buzz.delena.agentportal.notifications.EXTRA_OPEN_SESSION_ID
 import buzz.delena.agentportal.ui.screens.ChatScreen
 import buzz.delena.agentportal.ui.screens.LoginScreen
 import buzz.delena.agentportal.ui.screens.SessionListScreen
@@ -32,6 +31,13 @@ fun AgentPortalNavHost(
 ) {
     val container = (LocalContext.current.applicationContext as AgentPortalApplication).container
     val startDestination = if (container.authRepository.isLoggedIn()) Routes.SESSION_LIST else Routes.LOGIN
+
+    fun goToLoginCleared() {
+        navController.navigate(Routes.LOGIN) {
+            popUpTo(navController.graph.id) { inclusive = true }
+            launchSingleTop = true
+        }
+    }
 
     val openSessionId by pendingOpenSessionId.collectAsState()
     LaunchedEffect(openSessionId) {
@@ -85,6 +91,7 @@ fun AgentPortalNavHost(
                 factory = SessionListViewModel.Factory(
                     container.sessionRepository,
                     container.authRepository,
+                    container.stompClient,
                 ),
             )
             val state by viewModel.state.collectAsState()
@@ -102,6 +109,8 @@ fun AgentPortalNavHost(
                 onFilterChange = viewModel::setFilter,
                 onRefresh = viewModel::refresh,
                 onDismissError = viewModel::dismissError,
+                onReconnect = viewModel::reconnect,
+                onSignOut = { viewModel.logout { goToLoginCleared() } },
             )
         }
 
@@ -146,6 +155,8 @@ fun AgentPortalNavHost(
                 onCancelRun = viewModel::cancelRun,
                 onArchive = viewModel::archive,
                 onDismissError = viewModel::dismissError,
+                onReconnect = viewModel::reconnect,
+                onSignOut = { viewModel.logout { goToLoginCleared() } },
                 onBack = { navController.popBackStack() },
             )
         }

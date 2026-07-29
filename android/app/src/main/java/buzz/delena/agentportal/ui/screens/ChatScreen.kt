@@ -49,6 +49,7 @@ import buzz.delena.agentportal.theme.ApColors
 import buzz.delena.agentportal.ui.components.ActivityTimelineSheet
 import buzz.delena.agentportal.ui.components.ChangesDiffSheet
 import buzz.delena.agentportal.ui.components.ChatInputBar
+import buzz.delena.agentportal.ui.components.ConnectionAccountSheet
 import buzz.delena.agentportal.ui.components.ConnectionStatusBar
 import buzz.delena.agentportal.ui.components.MessageBubble
 import buzz.delena.agentportal.ui.components.StatusPill
@@ -128,6 +129,7 @@ data class ChatUiState(
     val pendingPermission: PendingPermissionItem? = null,
     val activeSheet: ChatSheet = ChatSheet.None,
     val error: String? = null,
+    val isReconnecting: Boolean = false,
     val realtimeState: buzz.delena.agentportal.core.network.ConnectionState =
         buzz.delena.agentportal.core.network.ConnectionState.DISCONNECTED,
     val connectionStatus: buzz.delena.agentportal.ui.components.ConnectionStatusUi? = null,
@@ -165,11 +167,13 @@ fun ChatScreen(
     onCancelRun: () -> Unit,
     onArchive: () -> Unit,
     onDismissError: () -> Unit,
+    onReconnect: () -> Unit = {},
+    onSignOut: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     val listState = rememberLazyListState()
     var menuOpen by remember { mutableStateOf(false) }
-    var connectionExpanded by remember { mutableStateOf(false) }
+    var showConnectionSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.messages.size, state.activityChips.size) {
         if (state.messages.isNotEmpty()) {
@@ -289,8 +293,7 @@ fun ChatScreen(
             state.connectionStatus?.let { status ->
                 ConnectionStatusBar(
                     status = status,
-                    expanded = connectionExpanded,
-                    onToggle = { connectionExpanded = !connectionExpanded },
+                    onOpenDetails = { showConnectionSheet = true },
                 )
             }
             LazyColumn(
@@ -364,6 +367,19 @@ fun ChatScreen(
             onDismiss = onDismissSheet,
         )
         ChatSheet.None -> Unit
+    }
+
+    if (showConnectionSheet && state.connectionStatus != null) {
+        ConnectionAccountSheet(
+            status = state.connectionStatus,
+            isReconnecting = state.isReconnecting,
+            onReconnect = onReconnect,
+            onSignOut = {
+                showConnectionSheet = false
+                onSignOut()
+            },
+            onDismiss = { showConnectionSheet = false },
+        )
     }
 }
 

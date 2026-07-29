@@ -2,9 +2,12 @@ package buzz.delena.agentportal.core.data
 
 import buzz.delena.agentportal.core.network.AgentPortalApi
 import buzz.delena.agentportal.core.network.AuthApi
+import buzz.delena.agentportal.core.network.TokenRefresher
 import buzz.delena.agentportal.core.network.dto.AuthConfigDto
 import buzz.delena.agentportal.core.network.dto.LoginRequest
 import buzz.delena.agentportal.core.network.dto.OAuthTokenResponse
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Wraps the two-step login flow: fetch runtime auth config from this app's
@@ -68,6 +71,30 @@ class AuthRepository(
             )
             tokenStore.saveTokens(response.accessToken, response.refreshToken)
             tokenStore.saveAuthMethod(AuthMethod.PASSWORD)
+            Result.success(Unit)
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+    }
+
+    /**
+     * Manual reconnect: refresh auth-server cache, then refresh the access
+     * token without wiping storage on failure (UI offers Sign out instead).
+     */
+    suspend fun reconnectSession(): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            getAuthConfig().getOrThrow()
+            if (tokenStore.getRefreshToken().isNullOrBlank()) {
+                return@withContext Result.failure(
+                    IllegalStateException("No refresh token stored — sign out and sign in again"),
+                )
+            }
+            val ok = TokenRefresher.tryRefresh(tokenStore, clearOnFailure = false)
+            if (!ok) {
+                return@withContext Result.failure(
+                    IllegalStateException("Could not refresh the access token — sign out and sign in again"),
+                )
+            }
             Result.success(Unit)
         } catch (t: Throwable) {
             Result.failure(t)

@@ -43,6 +43,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import buzz.delena.agentportal.theme.AgentPortalTheme
 import buzz.delena.agentportal.theme.ApColors
+import buzz.delena.agentportal.ui.components.ConnectionAccountSheet
 import buzz.delena.agentportal.ui.components.ConnectionStatusBar
 import buzz.delena.agentportal.ui.components.ConnectionStatusUi
 import buzz.delena.agentportal.ui.components.SessionCard
@@ -65,6 +66,7 @@ data class SessionListUiState(
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val isCreating: Boolean = false,
+    val isReconnecting: Boolean = false,
     val error: String? = null,
     val connectionStatus: ConnectionStatusUi? = null,
 )
@@ -78,9 +80,11 @@ fun SessionListScreen(
     onFilterChange: (SessionListFilter) -> Unit,
     onRefresh: () -> Unit,
     onDismissError: () -> Unit,
+    onReconnect: () -> Unit = {},
+    onSignOut: () -> Unit = {},
 ) {
     var showCreateSheet by remember { mutableStateOf(false) }
-    var connectionExpanded by remember { mutableStateOf(false) }
+    var showConnectionSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     Scaffold(
@@ -121,8 +125,7 @@ fun SessionListScreen(
                 state.connectionStatus?.let { status ->
                     ConnectionStatusBar(
                         status = status,
-                        expanded = connectionExpanded,
-                        onToggle = { connectionExpanded = !connectionExpanded },
+                        onOpenDetails = { showConnectionSheet = true },
                     )
                 }
                 FilterRow(
@@ -215,6 +218,19 @@ fun SessionListScreen(
                 onCancel = { showCreateSheet = false },
             )
         }
+    }
+
+    if (showConnectionSheet && state.connectionStatus != null) {
+        ConnectionAccountSheet(
+            status = state.connectionStatus,
+            isReconnecting = state.isReconnecting,
+            onReconnect = onReconnect,
+            onSignOut = {
+                showConnectionSheet = false
+                onSignOut()
+            },
+            onDismiss = { showConnectionSheet = false },
+        )
     }
 }
 

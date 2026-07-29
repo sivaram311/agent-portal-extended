@@ -34,7 +34,7 @@ private data class RefreshTokenRequest(
 object TokenRefresher {
 
     /** Returns true if a new access token was obtained and saved. */
-    fun tryRefresh(tokenStore: TokenStore): Boolean {
+    fun tryRefresh(tokenStore: TokenStore, clearOnFailure: Boolean = true): Boolean {
         val refreshToken = tokenStore.getRefreshToken() ?: return false
         val authUrl = tokenStore.getAuthUrl() ?: return false
         val refreshPath = tokenStore.getRefreshPath() ?: return false
@@ -45,11 +45,13 @@ object TokenRefresher {
         }.getOrNull()
 
         if (newTokens == null) {
-            // Refresh token itself is invalid/expired -- no way to recover
-            // without a fresh login. Clearing tokens means the next screen
-            // read of AuthRepository.isLoggedIn() correctly routes back to
-            // the login screen instead of looping on auth failures forever.
-            tokenStore.clear()
+            // Automatic paths (REST 403 interceptor / WS handshake) clear so
+            // the next navigation lands on login. Manual "Reconnect" passes
+            // clearOnFailure=false so a transient network blip doesn't wipe
+            // the session — the UI can offer Sign out instead.
+            if (clearOnFailure) {
+                tokenStore.clear()
+            }
             return false
         }
 

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import buzz.delena.agentportal.core.data.AuthRepository
 import buzz.delena.agentportal.core.data.SessionRepository
 import buzz.delena.agentportal.core.data.local.SessionEntity
+import buzz.delena.agentportal.core.network.StompWebSocketClient
 import buzz.delena.agentportal.core.network.userFacingErrorMessage
 import buzz.delena.agentportal.ui.components.ConnectionStatusUi
 import buzz.delena.agentportal.ui.components.isNeedsYouStatus
@@ -31,12 +32,14 @@ enum class SessionListFilter(val label: String) {
 class SessionListViewModel(
     private val sessionRepository: SessionRepository,
     private val authRepository: AuthRepository,
+    private val stompClient: StompWebSocketClient,
 ) : ViewModel() {
 
     private val filter = MutableStateFlow(SessionListFilter.ALL)
     private val loading = MutableStateFlow(true)
     private val refreshing = MutableStateFlow(false)
     private val creating = MutableStateFlow(false)
+    private val reconnecting = MutableStateFlow(false)
     private val error = MutableStateFlow<String?>(null)
     private val connectionStatus = MutableStateFlow(ConnectionStatusUi.from(authRepository.authSessionInfo()))
 
@@ -45,11 +48,21 @@ class SessionListViewModel(
         val isLoading: Boolean,
         val isRefreshing: Boolean,
         val isCreating: Boolean,
+        val isReconnecting: Boolean,
         val error: String?,
     )
 
     private val flags = combine(filter, loading, refreshing, creating, error) { f, l, r, c, e ->
-        Flags(f, l, r, c, e)
+        Flags(
+            filter = f,
+            isLoading = l,
+            isRefreshing = r,
+            isCreating = c,
+            isReconnecting = false,
+            error = e,
+        )
+    }.combine(reconnecting) { base, reconnectingNow ->
+        base.copy(isReconnecting = reconnectingNow)
     }
 
     val state: StateFlow<SessionListUiState> = combine(
@@ -65,6 +78,7 @@ class SessionListViewModel(
             isLoading = f.isLoading,
             isRefreshing = f.isRefreshing,
             isCreating = f.isCreating,
+            isReconnecting = f.isReconnecting,
             error = f.error,
             connectionStatus = connection,
         )
@@ -92,6 +106,10 @@ class SessionListViewModel(
         error.value = null
     }
 
+    fun refreshConnectionStatus() {
+        connectionStatus.value = ConnectionStatusUi.from(authRepository.authSessionInfo())
+    }
+
     fun refresh() {
         viewModelScope.launch {
             refreshing.value = true
@@ -101,6 +119,27 @@ class SessionListViewModel(
             refreshing.value = false
             loading.value = false
         }
+    }
+
+    fun reconnect() {
+        if (reconnecting.value) return
+        viewModelScope.launch {
+            reconnecting.value = true
+            error.value = null
+            authRepository.reconnectSession()
+                .onSuccess {
+                    connectionStatus.value = ConnectionStatusUi.from(authRepository.authSessionInfo())
+                    runCatching { sessionRepository.refreshSessions() }
+                }
+                .onFailure { error.value = userFacingErrorMessage(it) }
+            reconnecting.value = false
+        }
+    }
+
+    fun logout(onDone: () -> Unit) {
+        stompClient.disconnect()
+        authRepository.logout()
+        onDone()
     }
 
     fun createSession(workspacePath: String, title: String?, provider: String?, onCreated: (String) -> Unit) {
@@ -133,10 +172,11 @@ class SessionListViewModel(
     class Factory(
         private val sessionRepository: SessionRepository,
         private val authRepository: AuthRepository,
+        private val stompClient: StompWebSocketClient,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return SessionListViewModel(sessionRepository, authRepository) as T
+            return SessionListViewModel(sessionRepository, authRepository, stompClient) as T
         }
     }
 }

@@ -185,6 +185,17 @@ class StompWebSocketClient(
         awaitClose { messageListeners.remove(listener) }
     }
 
+    fun forceReconnect() {
+        wantConnected.set(true)
+        cancelReconnect()
+        stopHeartbeat()
+        reconnectAttempt.set(0)
+        runCatching { webSocket?.cancel() }
+        webSocket = null
+        _connectionState.value = ConnectionState.DISCONNECTED
+        connectInternal(allowAuthRetry = true)
+    }
+
     fun disconnect() {
         wantConnected.set(false)
         cancelReconnect()

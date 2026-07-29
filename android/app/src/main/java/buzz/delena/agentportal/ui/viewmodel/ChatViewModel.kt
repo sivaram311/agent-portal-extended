@@ -219,6 +219,34 @@ class ChatViewModel(
         _state.value = _state.value.copy(error = null)
     }
 
+    fun reconnect() {
+        if (_state.value.isReconnecting) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isReconnecting = true, error = null)
+            authRepository.reconnectSession()
+                .onSuccess {
+                    stompClient.forceReconnect()
+                    _state.value = _state.value.copy(
+                        connectionStatus = ConnectionStatusUi.from(
+                            authRepository.authSessionInfo(),
+                            _state.value.realtimeState,
+                        ),
+                    )
+                    refresh()
+                }
+                .onFailure { t ->
+                    _state.value = _state.value.copy(error = userFacingErrorMessage(t))
+                }
+            _state.value = _state.value.copy(isReconnecting = false)
+        }
+    }
+
+    fun logout(onDone: () -> Unit) {
+        stompClient.disconnect()
+        authRepository.logout()
+        onDone()
+    }
+
     fun openDecisionSheet() {
         if (_state.value.pendingPermission != null) {
             _state.value = _state.value.copy(activeSheet = ChatSheet.Decision)

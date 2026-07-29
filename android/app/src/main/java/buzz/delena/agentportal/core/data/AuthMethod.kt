@@ -4,6 +4,9 @@ package buzz.delena.agentportal.core.data
  * How the current CSS tokens were obtained. Persisted alongside the tokens so
  * the UI can show Password vs SSO without re-deriving it from the JWT
  * (both lanes currently mint the same agent-portal client tokens).
+ *
+ * [UNKNOWN] is for installs that signed in before method was stored — display
+ * as "Signed in", not an error.
  */
 enum class AuthMethod {
     PASSWORD,
@@ -15,6 +18,6 @@ enum class AuthMethod {
         get() = when (this) {
             PASSWORD -> "Password"
             SSO -> "SSO"
-            UNKNOWN -> "Unknown"
+            UNKNOWN -> "Signed in"
         }
 }
