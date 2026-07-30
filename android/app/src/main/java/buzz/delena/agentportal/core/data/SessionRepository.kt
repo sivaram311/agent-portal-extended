@@ -138,6 +138,15 @@ class SessionRepository(
         }
     }
 
+    suspend fun abandonSubagent(sessionId: String, subagentId: String): Result<Unit> {
+        return try {
+            api.abandonSubagent(sessionId, subagentId)
+            Result.success(Unit)
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+    }
+
     suspend fun getChanges(sessionId: String): Result<List<FileChangeDto>> {
         return try {
             Result.success(api.getChanges(sessionId))

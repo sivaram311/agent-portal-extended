@@ -65,6 +65,7 @@ class StompWebSocketClient(
     private val subscriptionCounter = AtomicInteger(0)
     private val messageListeners = CopyOnWriteArrayList<(StompEvent) -> Unit>()
     private val wantConnected = AtomicBoolean(false)
+    private val connectRefs = AtomicInteger(0)
     private val reconnectAttempt = AtomicInteger(0)
     private val scheduler: ScheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor { r ->
@@ -76,6 +77,24 @@ class StompWebSocketClient(
     fun connect() {
         wantConnected.set(true)
         connectInternal(allowAuthRetry = true)
+    }
+
+    /** Ref-count so leaving Chat does not kill a socket Sessions still needs. */
+    fun acquire() {
+        if (connectRefs.incrementAndGet() == 1) {
+            connect()
+        } else if (_connectionState.value != ConnectionState.CONNECTED &&
+            _connectionState.value != ConnectionState.CONNECTING
+        ) {
+            connect()
+        }
+    }
+
+    fun release() {
+        if (connectRefs.decrementAndGet() <= 0) {
+            connectRefs.set(0)
+            disconnect()
+        }
     }
 
     private fun connectInternal(allowAuthRetry: Boolean) {
@@ -199,6 +218,7 @@ class StompWebSocketClient(
     }
 
     fun disconnect() {
+        connectRefs.set(0)
         wantConnected.set(false)
         cancelReconnect()
         stopHeartbeat()

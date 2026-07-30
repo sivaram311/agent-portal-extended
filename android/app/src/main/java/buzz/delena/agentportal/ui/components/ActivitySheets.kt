@@ -57,6 +57,7 @@ fun TurnActivitySummary(
     onOpenTools: () -> Unit,
     onOpenReads: () -> Unit,
     onOpenChanges: () -> Unit,
+    onOpenSubagents: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     if (chips.isEmpty() && changeCount <= 0) return
@@ -72,11 +73,13 @@ fun TurnActivitySummary(
                 label = chip.text,
                 tone = when (chip.kind) {
                     buzz.delena.agentportal.ui.activity.ChipKind.READS -> ApColors.Info
+                    buzz.delena.agentportal.ui.activity.ChipKind.SUBAGENTS -> ApColors.Warning
                     else -> ApColors.TextMuted
                 },
                 onClick = {
                     when (chip.kind) {
                         buzz.delena.agentportal.ui.activity.ChipKind.READS -> onOpenReads()
+                        buzz.delena.agentportal.ui.activity.ChipKind.SUBAGENTS -> onOpenSubagents()
                         else -> onOpenTools()
                     }
                 },

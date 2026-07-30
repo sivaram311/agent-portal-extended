@@ -1,10 +1,13 @@
 package buzz.delena.agentportal.ui.components
 
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -17,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,40 +34,75 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import buzz.delena.agentportal.theme.AgentPortalTheme
 import buzz.delena.agentportal.theme.ApColors
 
-// This gate protects a session that can run shell commands and edit files on
-// a remote backend, so a lost/unlocked phone with a cached login token is
-// real blast radius. Lock state is intentionally process-lifetime only
-// (remember, not persisted) -- it re-locks on every cold app start rather
-// than staying unlocked forever.
+// Protects a cached login that can run shell commands on a remote backend.
+// Lock is process-lifetime only (remember). Overlay keeps NavHost composition
+// stable so unlocking does not recreate the whole graph mid-frame.
 @Composable
 fun AppLockGate(hasSession: Boolean, content: @Composable () -> Unit) {
     if (!hasSession) {
-        // Nothing to protect yet -- user isn't logged in.
         content()
         return
     }
 
     var unlocked by remember { mutableStateOf(false) }
-
-    if (unlocked) {
-        content()
-        return
+    val context = LocalContext.current
+    val activity = remember(context) { context.findFragmentActivity() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var lifecycleStarted by remember {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
     }
 
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            lifecycleStarted = when (event) {
+                Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> true
+                Lifecycle.Event.ON_STOP, Lifecycle.Event.ON_DESTROY -> false
+                else -> lifecycleStarted
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Keep content composed while locked so process death / unlock does not
+        // tear down navigation mid-transition (felt like an unexpected close).
+        content()
+
+        if (!unlocked) {
+            LockOverlay(
+                activity = activity,
+                lifecycleStarted = lifecycleStarted,
+                onUnlocked = { unlocked = true },
+            )
+        }
+    }
+}
+
+@Composable
+private fun LockOverlay(
+    activity: FragmentActivity?,
+    lifecycleStarted: Boolean,
+    onUnlocked: () -> Unit,
+) {
     val context = LocalContext.current
-    val activity = context as FragmentActivity
     val biometricManager = remember { BiometricManager.from(context) }
     val allowedAuthenticators = BIOMETRIC_WEAK or DEVICE_CREDENTIAL
     val canAuthenticate = remember {
         biometricManager.canAuthenticate(allowedAuthenticators)
     }
-    val deviceUnprotected = canAuthenticate != BiometricManager.BIOMETRIC_SUCCESS
+    val deviceUnprotected = canAuthenticate != BiometricManager.BIOMETRIC_SUCCESS || activity == null
 
     fun launchPrompt() {
-        if (deviceUnprotected) return
+        val host = activity ?: return
+        if (deviceUnprotected || !lifecycleStarted) return
+        if (!host.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
 
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Unlock Agent Portal")
@@ -71,34 +110,23 @@ fun AppLockGate(hasSession: Boolean, content: @Composable () -> Unit) {
             .setAllowedAuthenticators(allowedAuthenticators)
             .build()
 
-        val prompt = BiometricPrompt(
-            activity,
-            ContextCompat.getMainExecutor(context),
-            object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(
-                    result: BiometricPrompt.AuthenticationResult,
-                ) {
-                    unlocked = true
-                }
-
-                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    // User cancelled or auth failed hard -- stay locked, the
-                    // visible Unlock button lets them retry.
-                }
-
-                override fun onAuthenticationFailed() {
-                    // A single failed attempt (e.g. bad fingerprint read);
-                    // the system prompt keeps itself open for retries.
-                }
-            },
-        )
-        prompt.authenticate(promptInfo)
+        runCatching {
+            BiometricPrompt(
+                host,
+                ContextCompat.getMainExecutor(context),
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(
+                        result: BiometricPrompt.AuthenticationResult,
+                    ) {
+                        onUnlocked()
+                    }
+                },
+            ).authenticate(promptInfo)
+        }
     }
 
-    LaunchedEffect(Unit) {
-        // Trigger automatically on first composition so the user doesn't
-        // have to tap twice.
-        if (!deviceUnprotected) {
+    LaunchedEffect(lifecycleStarted, activity) {
+        if (!deviceUnprotected && lifecycleStarted) {
             launchPrompt()
         }
     }
@@ -138,22 +166,26 @@ fun AppLockGate(hasSession: Boolean, content: @Composable () -> Unit) {
                     )
                     if (deviceUnprotected) {
                         Text(
-                            text = "Device has no lock screen / biometric configured " +
-                                "- app is unprotected",
+                            text = if (activity == null) {
+                                "Could not open the device lock screen — tap Continue."
+                            } else {
+                                "Device has no lock screen / biometric configured " +
+                                    "- app is unprotected"
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = ApColors.Warning,
                             textAlign = TextAlign.Center,
                         )
-                        Button(onClick = { unlocked = true }) {
+                        Button(onClick = onUnlocked) {
                             Text("Continue")
                         }
                     } else {
-                    Text(
-                        text = "App lock — your sign-in token is still saved. Authenticate to continue.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ApColors.TextMuted,
-                        textAlign = TextAlign.Center,
-                    )
+                        Text(
+                            text = "App lock — your sign-in token is still saved. Authenticate to continue.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ApColors.TextMuted,
+                            textAlign = TextAlign.Center,
+                        )
                         Button(onClick = { launchPrompt() }) {
                             Text("Unlock")
                         }
@@ -164,12 +196,19 @@ fun AppLockGate(hasSession: Boolean, content: @Composable () -> Unit) {
     }
 }
 
+private fun Context.findFragmentActivity(): FragmentActivity? {
+    var current: Context? = this
+    while (current is ContextWrapper) {
+        if (current is FragmentActivity) return current
+        current = current.baseContext
+    }
+    return current as? FragmentActivity
+}
+
 @Preview(showBackground = true, backgroundColor = 0xFF0F172A)
 @Composable
 private fun AppLockGateLockedPreview() {
     AgentPortalTheme {
-        // Preview only renders the locked chrome; biometric APIs need a real
-        // FragmentActivity so the interactive prompt itself isn't exercised here.
         Column(
             modifier = Modifier
                 .fillMaxSize()

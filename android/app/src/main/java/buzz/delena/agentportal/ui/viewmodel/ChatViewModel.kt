@@ -14,6 +14,8 @@ import buzz.delena.agentportal.core.network.dto.FileChangeDto
 import buzz.delena.agentportal.core.network.dto.PermissionStatus
 import buzz.delena.agentportal.core.network.userFacingErrorMessage
 import buzz.delena.agentportal.notifications.PermissionApprovalNotifier
+import buzz.delena.agentportal.ui.activity.ChipKind
+import buzz.delena.agentportal.ui.activity.SubagentItem
 import buzz.delena.agentportal.ui.activity.ToolActivity
 import buzz.delena.agentportal.ui.components.ConnectionStatusUi
 import buzz.delena.agentportal.ui.components.countDiffLines
@@ -35,6 +37,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
 @Serializable
@@ -87,7 +90,7 @@ class ChatViewModel(
         }
         refresh()
 
-        stompClient.connect()
+        stompClient.acquire()
         viewModelScope.launch {
             stompClient.connectionState.collect { connectionState ->
                 _state.value = _state.value.copy(
@@ -121,7 +124,7 @@ class ChatViewModel(
                     }
                 }
                 .collect { event ->
-                    handleStompEvent(event.bodyJson)
+                    runCatching { handleStompEvent(event.bodyJson) }
                 }
         }
     }
@@ -145,7 +148,9 @@ class ChatViewModel(
                 refresh()
                 openDecisionSheet()
             }
-            "tool_call", "run_completed", "run_failed", "run_cancelled", "assistant_message" -> {
+            "subagent_started", "subagent_progress", "subagent_finished",
+            "tool_call", "run_completed", "run_failed", "run_cancelled", "assistant_message",
+            -> {
                 streamingMessageId = null
                 streamingBuffer.setLength(0)
                 refresh()
@@ -159,7 +164,9 @@ class ChatViewModel(
     }
 
     private fun appendStreamingDelta(payload: JsonObject?) {
-        val text = payload?.get("text")?.jsonPrimitive?.content
+        val text = runCatching {
+            payload?.get("text")?.jsonPrimitive?.contentOrNull
+        }.getOrNull()
         if (text.isNullOrEmpty()) return
 
         streamingBuffer.append(text)
@@ -261,6 +268,30 @@ class ChatViewModel(
     fun openChangesSheet() {
         _state.value = _state.value.copy(activeSheet = ChatSheet.Changes)
         refreshActivity()
+    }
+
+    fun openSubagentsSheet() {
+        _state.value = _state.value.copy(activeSheet = ChatSheet.Subagents)
+        refreshActivity()
+    }
+
+    fun toggleShowFinishedSubagents() {
+        _state.value = _state.value.copy(
+            showFinishedSubagents = !_state.value.showFinishedSubagents,
+        )
+    }
+
+    fun abandonSubagent(subagentId: String) {
+        if (_state.value.isAbandoningSubagent || subagentId.isBlank()) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isAbandoningSubagent = true, error = null)
+            sessionRepository.abandonSubagent(sessionId, subagentId)
+                .onSuccess { refreshActivity() }
+                .onFailure { t ->
+                    _state.value = _state.value.copy(error = userFacingErrorMessage(t))
+                }
+            _state.value = _state.value.copy(isAbandoningSubagent = false)
+        }
     }
 
     fun dismissSheet() {
@@ -369,10 +400,24 @@ class ChatViewModel(
                 messages = messages,
                 showReads = _state.value.showReadsInTimeline,
             )
+            val subagents = ToolActivity.extractSubagents(rawTools)
+            val activeSubs = subagents.count { it.active }
+            val chips = activity.chipLabels.toMutableList()
+            if (activeSubs > 0 || subagents.isNotEmpty()) {
+                chips += buzz.delena.agentportal.ui.activity.ActivityChipLabel(
+                    text = if (activeSubs > 0) {
+                        "$activeSubs sub-agent${if (activeSubs == 1) "" else "s"}"
+                    } else {
+                        "${subagents.size} sub-agent${if (subagents.size == 1) "" else "s"}"
+                    },
+                    kind = ChipKind.SUBAGENTS,
+                )
+            }
             _state.value = _state.value.copy(
                 tools = activity.steps,
                 readTools = activity.reads,
-                activityChips = activity.chipLabels,
+                subagents = subagents,
+                activityChips = chips,
                 turnScoped = activity.turnScoped,
                 sessionRawToolCount = activity.sessionRawCount,
                 changes = changes,
@@ -438,7 +483,7 @@ class ChatViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        stompClient.disconnect()
+        stompClient.release()
     }
 
     private fun MessageEntity.toItem() = ChatMessageItem(

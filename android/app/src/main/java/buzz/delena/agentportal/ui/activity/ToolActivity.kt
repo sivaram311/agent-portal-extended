@@ -230,6 +230,36 @@ object ToolActivity {
         toolCallId = toolCallId,
     )
 
+    /** Same filter as the web Sub-agents panel (kind=subagent or agent/task name). */
+    fun extractSubagents(allTools: List<ToolRunDto>): List<SubagentItem> {
+        return dedupe(allTools)
+            .filter { isSubagentRow(it) }
+            .map { tool ->
+                val key = tool.subagentId?.takeIf { it.isNotBlank() }
+                    ?: tool.toolCallId?.takeIf { it.isNotBlank() }
+                    ?: tool.id
+                SubagentItem(
+                    key = key,
+                    title = tool.toolName?.ifBlank { null } ?: "Sub-agent",
+                    status = tool.status,
+                    active = isActiveStatus(tool.status),
+                )
+            }
+            .distinctBy { it.key }
+    }
+
+    private fun isSubagentRow(tool: ToolRunDto): Boolean {
+        val kind = tool.kind?.trim().orEmpty()
+        if (kind.equals("subagent", ignoreCase = true)) return true
+        val name = tool.toolName?.trim().orEmpty()
+        return name.contains("agent", ignoreCase = true) || name.contains("task", ignoreCase = true)
+    }
+
+    private fun isActiveStatus(status: String?): Boolean {
+        val s = status?.trim()?.lowercase().orEmpty()
+        return s == "running" || s == "pending" || s == "in_progress" || s == "in-progress"
+    }
+
     private fun lastUserMessageInstant(messages: List<ChatMessageItem>): Instant? {
         val lastUser = messages.lastOrNull { it.isUser } ?: return null
         return parseInstant(lastUser.timeLabel)
@@ -266,7 +296,15 @@ data class ActivityChipLabel(
     val kind: ChipKind,
 )
 
+data class SubagentItem(
+    val key: String,
+    val title: String,
+    val status: String?,
+    val active: Boolean,
+)
+
 enum class ChipKind {
     PRIMARY,
     READS,
+    SUBAGENTS,
 }

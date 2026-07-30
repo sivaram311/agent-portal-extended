@@ -68,6 +68,12 @@ interface AgentPortalApi {
     @GET("api/sessions/{id}/tools")
     suspend fun getTools(@Path("id") sessionId: String): List<ToolRunDto>
 
+    @POST("api/sessions/{id}/subagents/{subId}/abandon")
+    suspend fun abandonSubagent(
+        @Path("id") sessionId: String,
+        @Path("subId") subId: String,
+    ): Unit
+
     @GET("api/sessions/{id}/changes")
     suspend fun getChanges(@Path("id") sessionId: String): List<FileChangeDto>
 

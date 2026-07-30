@@ -1,10 +1,10 @@
-﻿# Agent Portal â€” Extended
+# Agent Portal â€” Extended
 
 Native Android client (and future extended-features surface) for **[Agent Portal](https://github.com/sivaram311/agent-portal)** (`E:\MyWorkspace\agent-portal`, Spring Boot 3.5 + Angular 19) â€” lets users run and supervise AI coding-agent sessions from a phone instead of only a browser.
 
 This is a **separate repo** from `agent-portal` itself: `https://github.com/sivaram311/agent-portal-extended` (public). It talks to the existing Agent Portal REST/WebSocket API; it does not fork or duplicate the backend.
 
-**Status:** `v0.4.5-android-rate-limit-exempt-dev` (versionCode 15). Android sends `X-Agent-Portal-Client: android` (unlimited on DEV portal); prior: SSO Custom Tabs + false session-expiry fixes in v0.4.4.
+**Status:** `v0.4.6-subagents-crash-fix-dev` (versionCode 16). Sub-agents sheet + Abandon; app-lock/STOMP/markdown crash hardening.
 
 ## Features
 
@@ -34,7 +34,7 @@ Not yet done / explicitly deferred (see [ROADMAP.md](ROADMAP.md)):
 
 - Formal Device Lab E2E of SSO on Realme P2 Pro
 - A real push notification arriving on a real device (no ADB on this build host)
-- Full portal tabs (Logs/Code/Guidance) â€” out of happy-path scope
+- Remaining portal tabs (Code / Guidance / Console) — Sub-agents shipped in v0.4.6
 
 ## SSO notes
 

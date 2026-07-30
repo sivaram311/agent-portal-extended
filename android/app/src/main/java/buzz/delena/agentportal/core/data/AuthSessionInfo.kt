@@ -64,8 +64,8 @@ data class AuthSessionInfo(
             val authUrl = tokenStore.getAuthUrl()
             return AuthSessionInfo(
                 authMethod = tokenStore.getAuthMethod(),
-                subject = claims?.get("sub")?.jsonPrimitive?.contentOrNull,
-                clientId = claims?.get("client_id")?.jsonPrimitive?.contentOrNull
+                subject = claims?.let { readStringClaim(it, "sub") },
+                clientId = claims?.let { readStringClaim(it, "client_id") }
                     ?: tokenStore.getClientId(),
                 hasAccessToken = !access.isNullOrBlank(),
                 hasRefreshToken = !tokenStore.getRefreshToken().isNullOrBlank(),
@@ -76,10 +76,15 @@ data class AuthSessionInfo(
             )
         }
 
+        private fun readStringClaim(claims: kotlinx.serialization.json.JsonObject, key: String): String? =
+            runCatching { claims[key]?.jsonPrimitive?.contentOrNull }.getOrNull()
+
         private fun readExpSeconds(element: JsonElement?): Long? {
             if (element == null) return null
-            element.jsonPrimitive.longOrNull?.let { return it }
-            return element.jsonPrimitive.contentOrNull?.toLongOrNull()
+            return runCatching {
+                element.jsonPrimitive.longOrNull
+                    ?: element.jsonPrimitive.contentOrNull?.toLongOrNull()
+            }.getOrNull()
         }
 
         private fun decodeJwtClaims(token: String) = runCatching {

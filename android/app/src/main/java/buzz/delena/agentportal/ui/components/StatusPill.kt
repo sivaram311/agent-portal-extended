@@ -30,20 +30,26 @@ private val attentionStatuses = setOf("WAITING_PERMISSION", "WAITING_PLAN", "PAU
 private val negativeStatuses = setOf("FAILED", "ERROR")
 
 fun statusToneFor(status: String): StatusTone = when (status.uppercase()) {
-    in activeStatuses -> StatusTone.Positive
-    in attentionStatuses -> StatusTone.Attention
-    in negativeStatuses -> StatusTone.Negative
+    in activeStatuses,
+    "PENDING", "IN_PROGRESS", "IN-PROGRESS" -> StatusTone.Positive
+    in attentionStatuses,
+    "WAITING" -> StatusTone.Attention
+    in negativeStatuses,
+    "ABANDONED", "CANCELLED" -> StatusTone.Negative
+    "COMPLETED", "DONE" -> StatusTone.Positive
     else -> StatusTone.Muted
 }
 
 /** Human-facing status label for the supervisor happy path. */
 fun friendlyStatusLabel(status: String): String = when (status.uppercase()) {
     "WAITING_PERMISSION", "WAITING_PLAN" -> "Needs you"
-    "STREAMING", "RUNNING", "ACTIVE" -> "Running"
+    "STREAMING", "RUNNING", "ACTIVE", "IN_PROGRESS", "IN-PROGRESS" -> "Running"
+    "PENDING" -> "Pending"
     "IDLE" -> "Idle"
     "FAILED", "ERROR" -> "Failed"
-    "COMPLETED" -> "Done"
+    "COMPLETED", "DONE" -> "Done"
     "CANCELLED" -> "Cancelled"
+    "ABANDONED" -> "Abandoned"
     "ARCHIVED" -> "Archived"
     else -> status
 }

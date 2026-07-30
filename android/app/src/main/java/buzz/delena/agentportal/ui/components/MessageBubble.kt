@@ -104,7 +104,8 @@ private fun MarkdownContent(markdown: String, modifier: Modifier = Modifier) {
             }
         },
         update = { textView ->
-            markwon.setMarkdown(textView, markdown)
+            runCatching { markwon.setMarkdown(textView, markdown) }
+                .onFailure { textView.text = markdown }
         },
     )
 }

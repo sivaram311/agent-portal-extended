@@ -53,6 +53,7 @@ import buzz.delena.agentportal.ui.components.ConnectionAccountSheet
 import buzz.delena.agentportal.ui.components.ConnectionStatusBar
 import buzz.delena.agentportal.ui.components.MessageBubble
 import buzz.delena.agentportal.ui.components.StatusPill
+import buzz.delena.agentportal.ui.components.SubagentsSheet
 import buzz.delena.agentportal.ui.components.ToolDetailSheet
 import buzz.delena.agentportal.ui.components.TurnActivitySummary
 import buzz.delena.agentportal.ui.components.friendlyStatusLabel
@@ -109,6 +110,7 @@ enum class ChatSheet {
     Tools,
     ToolDetail,
     Changes,
+    Subagents,
 }
 
 data class ChatUiState(
@@ -117,6 +119,9 @@ data class ChatUiState(
     val messages: List<ChatMessageItem> = emptyList(),
     val tools: List<ToolStepItem> = emptyList(),
     val readTools: List<ToolStepItem> = emptyList(),
+    val subagents: List<buzz.delena.agentportal.ui.activity.SubagentItem> = emptyList(),
+    val showFinishedSubagents: Boolean = false,
+    val isAbandoningSubagent: Boolean = false,
     val activityChips: List<buzz.delena.agentportal.ui.activity.ActivityChipLabel> = emptyList(),
     val showReadsInTimeline: Boolean = false,
     val turnScoped: Boolean = true,
@@ -135,6 +140,7 @@ data class ChatUiState(
     val connectionStatus: buzz.delena.agentportal.ui.components.ConnectionStatusUi? = null,
 ) {
     val changeCount get() = changes.size
+    val activeSubagentCount get() = subagents.count { it.active }
     val failedToolCount get() = tools.count {
         it.status.equals("failed", true) || it.status.equals("error", true)
     }
@@ -153,6 +159,9 @@ fun ChatScreen(
     onDismissSheet: () -> Unit,
     onOpenToolsSheet: () -> Unit,
     onOpenChangesSheet: () -> Unit,
+    onOpenSubagentsSheet: () -> Unit = {},
+    onToggleFinishedSubagents: () -> Unit = {},
+    onAbandonSubagent: (String) -> Unit = {},
     onOpenReadsSheet: () -> Unit,
     onToggleShowReads: () -> Unit,
     onSelectTool: (ToolStepItem) -> Unit,
@@ -230,6 +239,21 @@ fun ChatScreen(
                             onClick = {
                                 menuOpen = false
                                 onOpenToolsSheet()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (state.activeSubagentCount > 0) {
+                                        "Sub-agents (${state.activeSubagentCount})"
+                                    } else {
+                                        "Sub-agents"
+                                    },
+                                )
+                            },
+                            onClick = {
+                                menuOpen = false
+                                onOpenSubagentsSheet()
                             },
                         )
                         DropdownMenuItem(
@@ -318,6 +342,7 @@ fun ChatScreen(
                                 onOpenTools = onOpenToolsSheet,
                                 onOpenReads = onOpenReadsSheet,
                                 onOpenChanges = onOpenChangesSheet,
+                                onOpenSubagents = onOpenSubagentsSheet,
                                 modifier = Modifier.padding(end = 48.dp),
                             )
                         }
@@ -364,6 +389,14 @@ fun ChatScreen(
             onSelect = onSelectChange,
             onAccept = onAcceptChange,
             onReject = onRejectChange,
+            onDismiss = onDismissSheet,
+        )
+        ChatSheet.Subagents -> SubagentsSheet(
+            subagents = state.subagents,
+            showFinished = state.showFinishedSubagents,
+            isBusy = state.isAbandoningSubagent,
+            onToggleFinished = onToggleFinishedSubagents,
+            onAbandon = onAbandonSubagent,
             onDismiss = onDismissSheet,
         )
         ChatSheet.None -> Unit
