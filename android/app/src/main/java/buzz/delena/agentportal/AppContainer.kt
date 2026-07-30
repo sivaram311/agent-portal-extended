@@ -5,6 +5,7 @@ import buzz.delena.agentportal.core.data.AuthRepository
 import buzz.delena.agentportal.core.data.SessionRepository
 import buzz.delena.agentportal.core.data.TokenStore
 import buzz.delena.agentportal.core.data.local.AppDatabase
+import buzz.delena.agentportal.core.diagnostics.DiagnosticsRepository
 import buzz.delena.agentportal.core.network.NetworkModule
 import buzz.delena.agentportal.core.network.StompWebSocketClient
 
@@ -26,6 +27,7 @@ class AppContainer(context: Context) {
 
     val authRepository = AuthRepository(agentPortalApi, authApi, tokenStore)
     val sessionRepository = SessionRepository(agentPortalApi, database.sessionDao(), database.messageDao())
+    val diagnosticsRepository = DiagnosticsRepository(context.applicationContext, agentPortalApi)
 
     // Separate OkHttp client for WS: infinite read timeout + protocol pings.
     // REST keeps long (but finite) timeouts for ACP handshake on /prompt.

@@ -53,6 +53,7 @@ class ChatViewModel(
     private val sessionRepository: SessionRepository,
     private val authRepository: AuthRepository,
     private val stompClient: StompWebSocketClient,
+    private val diagnosticsRepository: buzz.delena.agentportal.core.diagnostics.DiagnosticsRepository,
     private val appContext: Context,
     private val onArchived: () -> Unit = {},
 ) : ViewModel() {
@@ -252,6 +253,26 @@ class ChatViewModel(
         stompClient.disconnect()
         authRepository.logout()
         onDone()
+    }
+
+    fun sendDiagnostics() {
+        if (_state.value.isSendingDiagnostics) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isSendingDiagnostics = true, diagnosticsMessage = null)
+            diagnosticsRepository.sendManualDiagnostics()
+                .onSuccess { path ->
+                    _state.value = _state.value.copy(
+                        isSendingDiagnostics = false,
+                        diagnosticsMessage = "Sent to server ($path)",
+                    )
+                }
+                .onFailure { t ->
+                    _state.value = _state.value.copy(
+                        isSendingDiagnostics = false,
+                        diagnosticsMessage = t.message ?: "Could not send diagnostics",
+                    )
+                }
+        }
     }
 
     fun openDecisionSheet() {
@@ -510,6 +531,7 @@ class ChatViewModel(
         private val sessionRepository: SessionRepository,
         private val authRepository: AuthRepository,
         private val stompClient: StompWebSocketClient,
+        private val diagnosticsRepository: buzz.delena.agentportal.core.diagnostics.DiagnosticsRepository,
         private val appContext: Context,
         private val onArchived: () -> Unit = {},
     ) : ViewModelProvider.Factory {
@@ -521,6 +543,7 @@ class ChatViewModel(
                 sessionRepository,
                 authRepository,
                 stompClient,
+                diagnosticsRepository,
                 appContext,
                 onArchived,
             ) as T

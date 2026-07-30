@@ -163,6 +163,11 @@ class StompWebSocketClient(
                     }
                     _connectionState.value = ConnectionState.FAILED
                     scheduleReconnectIfWanted()
+                    buzz.delena.agentportal.core.diagnostics.AppLog.w(
+                        "StompWS",
+                        "WebSocket failure code=${response?.code} ${t.message}",
+                        t,
+                    )
                 }
             },
         )

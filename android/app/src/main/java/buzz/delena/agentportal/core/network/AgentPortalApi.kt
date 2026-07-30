@@ -1,6 +1,8 @@
 package buzz.delena.agentportal.core.network
 
 import buzz.delena.agentportal.core.network.dto.AuthConfigDto
+import buzz.delena.agentportal.core.network.dto.ClientDiagnosticsRequest
+import buzz.delena.agentportal.core.network.dto.ClientDiagnosticsResponse
 import buzz.delena.agentportal.core.network.dto.CreateSessionRequest
 import buzz.delena.agentportal.core.network.dto.FileChangeDto
 import buzz.delena.agentportal.core.network.dto.MessageDto
@@ -67,6 +69,11 @@ interface AgentPortalApi {
 
     @GET("api/sessions/{id}/tools")
     suspend fun getTools(@Path("id") sessionId: String): List<ToolRunDto>
+
+    @POST("api/diagnostics/client-logs")
+    suspend fun uploadClientDiagnostics(
+        @Body request: ClientDiagnosticsRequest,
+    ): ClientDiagnosticsResponse
 
     @POST("api/sessions/{id}/subagents/{subId}/abandon")
     suspend fun abandonSubagent(

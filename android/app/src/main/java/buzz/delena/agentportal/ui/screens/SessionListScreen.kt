@@ -67,6 +67,8 @@ data class SessionListUiState(
     val isRefreshing: Boolean = false,
     val isCreating: Boolean = false,
     val isReconnecting: Boolean = false,
+    val isSendingDiagnostics: Boolean = false,
+    val diagnosticsMessage: String? = null,
     val error: String? = null,
     val connectionStatus: ConnectionStatusUi? = null,
 )
@@ -82,6 +84,7 @@ fun SessionListScreen(
     onDismissError: () -> Unit,
     onReconnect: () -> Unit = {},
     onSignOut: () -> Unit = {},
+    onSendDiagnostics: () -> Unit = {},
 ) {
     var showCreateSheet by remember { mutableStateOf(false) }
     var showConnectionSheet by remember { mutableStateOf(false) }
@@ -230,6 +233,9 @@ fun SessionListScreen(
                 onSignOut()
             },
             onDismiss = { showConnectionSheet = false },
+            onSendDiagnostics = onSendDiagnostics,
+            isSendingDiagnostics = state.isSendingDiagnostics,
+            diagnosticsMessage = state.diagnosticsMessage,
         )
     }
 }

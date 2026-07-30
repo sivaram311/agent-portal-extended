@@ -92,6 +92,7 @@ fun AgentPortalNavHost(
                     container.sessionRepository,
                     container.authRepository,
                     container.stompClient,
+                    container.diagnosticsRepository,
                 ),
             )
             val state by viewModel.state.collectAsState()
@@ -111,6 +112,7 @@ fun AgentPortalNavHost(
                 onDismissError = viewModel::dismissError,
                 onReconnect = viewModel::reconnect,
                 onSignOut = { viewModel.logout { goToLoginCleared() } },
+                onSendDiagnostics = viewModel::sendDiagnostics,
             )
         }
 
@@ -126,6 +128,7 @@ fun AgentPortalNavHost(
                     sessionRepository = container.sessionRepository,
                     authRepository = container.authRepository,
                     stompClient = container.stompClient,
+                    diagnosticsRepository = container.diagnosticsRepository,
                     appContext = LocalContext.current.applicationContext,
                     onArchived = {
                         navController.popBackStack(Routes.SESSION_LIST, inclusive = false)
@@ -160,6 +163,7 @@ fun AgentPortalNavHost(
                 onDismissError = viewModel::dismissError,
                 onReconnect = viewModel::reconnect,
                 onSignOut = { viewModel.logout { goToLoginCleared() } },
+                onSendDiagnostics = viewModel::sendDiagnostics,
                 onBack = { navController.popBackStack() },
             )
         }

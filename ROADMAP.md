@@ -23,6 +23,7 @@ Prioritized tracks for the native Android client (and future extended-features s
 | **P0 SSO/session** | SSO opens + no false “expired” while JWT TTL left | **Done `v0.4.4-sso-session-fix-dev`** |
 | **P0 rate limit** | Android exempt via `X-Agent-Portal-Client: android` | **Done `v0.4.5-android-rate-limit-exempt-dev`** (needs portal RateLimitFilter) |
 | **P0 subagents** | Sub-agents sheet + abandon (Logs-tab parity) | **Done `v0.4.6-subagents-crash-fix-dev`** |
+| **P0 diagnostics** | Send diagnostics + crash dump upload to portal | **Done `v0.4.7-diagnostics-dev`** |
 | P2 | Firebase Cloud Messaging on-device proof | Code live; arrival unverified |
 | P2 | Device Lab E2E on Realme P2 Pro | Blocked — no ADB |
 

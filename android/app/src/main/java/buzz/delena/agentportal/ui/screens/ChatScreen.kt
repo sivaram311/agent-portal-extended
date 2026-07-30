@@ -135,6 +135,8 @@ data class ChatUiState(
     val activeSheet: ChatSheet = ChatSheet.None,
     val error: String? = null,
     val isReconnecting: Boolean = false,
+    val isSendingDiagnostics: Boolean = false,
+    val diagnosticsMessage: String? = null,
     val realtimeState: buzz.delena.agentportal.core.network.ConnectionState =
         buzz.delena.agentportal.core.network.ConnectionState.DISCONNECTED,
     val connectionStatus: buzz.delena.agentportal.ui.components.ConnectionStatusUi? = null,
@@ -178,6 +180,7 @@ fun ChatScreen(
     onDismissError: () -> Unit,
     onReconnect: () -> Unit = {},
     onSignOut: () -> Unit = {},
+    onSendDiagnostics: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     val listState = rememberLazyListState()
@@ -412,6 +415,9 @@ fun ChatScreen(
                 onSignOut()
             },
             onDismiss = { showConnectionSheet = false },
+            onSendDiagnostics = onSendDiagnostics,
+            isSendingDiagnostics = state.isSendingDiagnostics,
+            diagnosticsMessage = state.diagnosticsMessage,
         )
     }
 }

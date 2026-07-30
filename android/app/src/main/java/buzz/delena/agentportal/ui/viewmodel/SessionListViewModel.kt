@@ -33,6 +33,7 @@ class SessionListViewModel(
     private val sessionRepository: SessionRepository,
     private val authRepository: AuthRepository,
     private val stompClient: StompWebSocketClient,
+    private val diagnosticsRepository: buzz.delena.agentportal.core.diagnostics.DiagnosticsRepository,
 ) : ViewModel() {
 
     private val filter = MutableStateFlow(SessionListFilter.ALL)
@@ -40,6 +41,8 @@ class SessionListViewModel(
     private val refreshing = MutableStateFlow(false)
     private val creating = MutableStateFlow(false)
     private val reconnecting = MutableStateFlow(false)
+    private val sendingDiagnostics = MutableStateFlow(false)
+    private val diagnosticsMessage = MutableStateFlow<String?>(null)
     private val error = MutableStateFlow<String?>(null)
     private val connectionStatus = MutableStateFlow(ConnectionStatusUi.from(authRepository.authSessionInfo()))
 
@@ -49,6 +52,8 @@ class SessionListViewModel(
         val isRefreshing: Boolean,
         val isCreating: Boolean,
         val isReconnecting: Boolean,
+        val isSendingDiagnostics: Boolean,
+        val diagnosticsMessage: String?,
         val error: String?,
     )
 
@@ -59,10 +64,16 @@ class SessionListViewModel(
             isRefreshing = r,
             isCreating = c,
             isReconnecting = false,
+            isSendingDiagnostics = false,
+            diagnosticsMessage = null,
             error = e,
         )
     }.combine(reconnecting) { base, reconnectingNow ->
         base.copy(isReconnecting = reconnectingNow)
+    }.combine(sendingDiagnostics) { base, sending ->
+        base.copy(isSendingDiagnostics = sending)
+    }.combine(diagnosticsMessage) { base, message ->
+        base.copy(diagnosticsMessage = message)
     }
 
     val state: StateFlow<SessionListUiState> = combine(
@@ -79,6 +90,8 @@ class SessionListViewModel(
             isRefreshing = f.isRefreshing,
             isCreating = f.isCreating,
             isReconnecting = f.isReconnecting,
+            isSendingDiagnostics = f.isSendingDiagnostics,
+            diagnosticsMessage = f.diagnosticsMessage,
             error = f.error,
             connectionStatus = connection,
         )
@@ -147,6 +160,22 @@ class SessionListViewModel(
         }
     }
 
+    fun sendDiagnostics() {
+        if (sendingDiagnostics.value) return
+        viewModelScope.launch {
+            sendingDiagnostics.value = true
+            diagnosticsMessage.value = null
+            diagnosticsRepository.sendManualDiagnostics()
+                .onSuccess { path ->
+                    diagnosticsMessage.value = "Sent to server ($path)"
+                }
+                .onFailure { t ->
+                    diagnosticsMessage.value = t.message ?: "Could not send diagnostics"
+                }
+            sendingDiagnostics.value = false
+        }
+    }
+
     fun logout(onDone: () -> Unit) {
         stompClient.disconnect()
         authRepository.logout()
@@ -184,10 +213,16 @@ class SessionListViewModel(
         private val sessionRepository: SessionRepository,
         private val authRepository: AuthRepository,
         private val stompClient: StompWebSocketClient,
+        private val diagnosticsRepository: buzz.delena.agentportal.core.diagnostics.DiagnosticsRepository,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return SessionListViewModel(sessionRepository, authRepository, stompClient) as T
+            return SessionListViewModel(
+                sessionRepository,
+                authRepository,
+                stompClient,
+                diagnosticsRepository,
+            ) as T
         }
     }
 }

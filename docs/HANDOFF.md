@@ -7,22 +7,17 @@
 
 | Field | Value |
 |-------|-------|
-| versionName | `0.4.6-subagents-crash-fix-dev` · versionCode **16** |
-| APK SHA-256 | ``917E8A91ABE0F257579F902793855993BDF2C05A76C404A1E3A4E702E173041E`` |
+| versionName | `0.4.7-diagnostics-dev` · versionCode **17** |
+| APK SHA-256 | `0B12C6FDB9744810345413AB9BA926F4E258B8A3D7A92E697D584DC1D5B88D79` |
+
+## v0.4.7 — Mobile diagnostics upload
+
+- Manage → **Send diagnostics** uploads ring buffer + own logcat to `POST /api/diagnostics/client-logs`
+- Uncaught crashes write `pending-crash.log` and upload on next launch
+- Portal stores files under `logs/mobile-diagnostics/{date}/…` (admin list/download)
 
 ## v0.4.6 — Sub-agents + crash hardening
 
-- Sub-agents sheet (⋮ → Sub-agents; amber chip under chat): list active/finished, **Abandon** via `POST /api/sessions/{id}/subagents/{subId}/abandon`
-- STOMP `subagent_*` events refresh the list
-- Crash/close hardening: safe AppLockGate (no hard cast, lifecycle-gated biometric, overlay), safe JWT/STOMP JSON reads, Markwon try/catch, STOMP acquire/release
-
-## v0.4.5 — Android rate-limit exempt
-
-- `X-Agent-Portal-Client: android` header; portal RateLimitFilter exemption
-
-## Ops note — cleartext localhost
-
-Restart DEV with `agent-portal/scripts/start-dev-backend.ps1` if auth config falls back to `http://localhost:9000`.
+- Sub-agents sheet + Abandon; AppLockGate / STOMP / Markwon hardening
 
 Session: 2026-07-30.
-

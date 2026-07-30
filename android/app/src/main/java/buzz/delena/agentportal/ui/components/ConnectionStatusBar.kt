@@ -163,6 +163,9 @@ fun ConnectionAccountSheet(
     onReconnect: () -> Unit,
     onSignOut: () -> Unit,
     onDismiss: () -> Unit,
+    onSendDiagnostics: (() -> Unit)? = null,
+    isSendingDiagnostics: Boolean = false,
+    diagnosticsMessage: String? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -210,7 +213,7 @@ fun ConnectionAccountSheet(
             Spacer(Modifier.height(20.dp))
             Button(
                 onClick = onReconnect,
-                enabled = !isReconnecting && status.canReconnect,
+                enabled = !isReconnecting && !isSendingDiagnostics && status.canReconnect,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = ApColors.Accent,
@@ -239,10 +242,44 @@ fun ConnectionAccountSheet(
                     Text("Reconnect", fontWeight = FontWeight.SemiBold)
                 }
             }
+            if (onSendDiagnostics != null) {
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = onSendDiagnostics,
+                    enabled = !isReconnecting && !isSendingDiagnostics && !status.needsSignIn,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ApColors.TextPrimary),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    if (isSendingDiagnostics) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            CircularProgressIndicator(
+                                color = ApColors.Accent,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Text("  Sending diagnostics...")
+                        }
+                    } else {
+                        Text("Send diagnostics", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                if (!diagnosticsMessage.isNullOrBlank()) {
+                    Text(
+                        text = diagnosticsMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ApColors.TextMuted,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
             Spacer(Modifier.height(10.dp))
             OutlinedButton(
                 onClick = onSignOut,
-                enabled = !isReconnecting,
+                enabled = !isReconnecting && !isSendingDiagnostics,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = ApColors.Danger),
                 shape = RoundedCornerShape(12.dp),

@@ -56,12 +56,19 @@ object TokenRefresher {
             }
 
             val newTokens = result.getOrNull()
-            if (newTokens != null) {
-                tokenStore.saveTokens(newTokens.accessToken, newTokens.refreshToken)
-                return true
-            }
+        if (newTokens != null) {
+            tokenStore.saveTokens(newTokens.accessToken, newTokens.refreshToken)
+            return true
+        }
 
-            val failure = result.exceptionOrNull()
+        val failure = result.exceptionOrNull()
+        android.util.Log.w("TokenRefresher", "Token refresh failed", failure)
+        buzz.delena.agentportal.core.diagnostics.DiagnosticLogBuffer.append(
+            "W",
+            "TokenRefresher",
+            "Token refresh failed: ${failure?.message}",
+            failure,
+        )
             val rejectedByServer = failure is RefreshRejectedException
             // Automatic paths clear only on definitive auth rejection so a
             // flaky network does not kick the user out while JWT TTL still shows.
