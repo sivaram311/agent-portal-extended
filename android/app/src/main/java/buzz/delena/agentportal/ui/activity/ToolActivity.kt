@@ -223,7 +223,8 @@ object ToolActivity {
         title = toolName?.ifBlank { null } ?: kind ?: "Tool",
         status = status,
         subtitle = argsJson?.take(160),
-        output = output,
+        // Never keep multi-MB tool dumps in Compose state (see OOM diagnostics 2026-07-30).
+        output = output?.take(4_000),
         kind = kind,
         category = categorize(toolName, kind),
         startedAt = startedAt,

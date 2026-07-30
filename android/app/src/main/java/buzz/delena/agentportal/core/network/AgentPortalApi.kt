@@ -68,7 +68,11 @@ interface AgentPortalApi {
     suspend fun unarchiveSession(@Path("id") sessionId: String): SessionDto
 
     @GET("api/sessions/{id}/tools")
-    suspend fun getTools(@Path("id") sessionId: String): List<ToolRunDto>
+    suspend fun getTools(
+        @Path("id") sessionId: String,
+        /** Truncate huge args/output so chat refresh cannot OOM the process. */
+        @Query("compact") compact: Boolean = true,
+    ): List<ToolRunDto>
 
     @POST("api/diagnostics/client-logs")
     suspend fun uploadClientDiagnostics(

@@ -48,13 +48,21 @@ object NetworkModule {
         chain.proceed(builder.build())
     }
 
+    /**
+     * Never use [HttpLoggingInterceptor.Level.BODY] here: it buffers the full
+     * response into a String. Large session/changes payloads (tens of MB) have
+     * OOMed the process on device (see diagnostics crash 2026-07-30).
+     * HEADERS is enough for debug and does not copy bodies.
+     */
     private fun loggingInterceptor(): HttpLoggingInterceptor {
         return HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) {
-                HttpLoggingInterceptor.Level.BODY
+                HttpLoggingInterceptor.Level.HEADERS
             } else {
                 HttpLoggingInterceptor.Level.NONE
             }
+            redactHeader("Authorization")
+            redactHeader("Cookie")
         }
     }
 
