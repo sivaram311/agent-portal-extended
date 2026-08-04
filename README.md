@@ -1,10 +1,10 @@
-﻿# Agent Portal â€” Extended
+﻿# Foreman
 
 Native Android client (and future extended-features surface) for **[Agent Portal](https://github.com/sivaram311/agent-portal)** (`E:\MyWorkspace\agent-portal`, Spring Boot 3.5 + Angular 19) â€” lets users run and supervise AI coding-agent sessions from a phone instead of only a browser.
 
 This is a **separate repo** from `agent-portal` itself: `https://github.com/sivaram311/agent-portal-extended` (public). It talks to the existing Agent Portal REST/WebSocket API; it does not fork or duplicate the backend.
 
-**Status:** `v0.4.8-oom-http-log-fix-dev` (versionCode 18). Fixes OOM crash from BODY-logging 45MB `/tools` payloads.
+**Status:** `v1.0.0` (versionCode 19). Display name Foreman; name+version shown in Manage sheet.
 
 ## Features
 

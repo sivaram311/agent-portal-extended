@@ -109,7 +109,7 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    text = "Agent Portal",
+                    text = "Foreman",
                     style = MaterialTheme.typography.titleLarge,
                     color = ApColors.TextPrimary,
                     fontWeight = FontWeight.Bold,

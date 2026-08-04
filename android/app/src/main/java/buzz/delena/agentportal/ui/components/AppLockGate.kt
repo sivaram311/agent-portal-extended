@@ -105,7 +105,7 @@ private fun LockOverlay(
         if (!host.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
 
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Unlock Agent Portal")
+            .setTitle("Unlock Foreman")
             .setSubtitle("Authenticate to access your agent sessions")
             .setAllowedAuthenticators(allowedAuthenticators)
             .build()
@@ -159,7 +159,7 @@ private fun LockOverlay(
                         modifier = Modifier.size(48.dp),
                     )
                     Text(
-                        text = "Agent Portal is locked",
+                        text = "Foreman is locked",
                         style = MaterialTheme.typography.titleLarge,
                         color = ApColors.TextPrimary,
                         textAlign = TextAlign.Center,
@@ -229,7 +229,7 @@ private fun AppLockGateLockedPreview() {
                         modifier = Modifier.size(48.dp),
                     )
                     Text(
-                        text = "Agent Portal is locked",
+                        text = "Foreman is locked",
                         style = MaterialTheme.typography.titleLarge,
                         color = ApColors.TextPrimary,
                     )
