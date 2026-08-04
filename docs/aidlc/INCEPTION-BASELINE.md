@@ -1,10 +1,21 @@
-# AI-DLC Inception Baseline - agent-portal-extended
+# AI-DLC Inception Baseline - agent-portal-extended (app display name: Foreman)
 
 **Captured:** 2026-08-01 (as-is snapshot, not a target design)
+**Updated:** 2026-08-04 - display rename to **Foreman** + v1.0.0 + three real bugfixes, see "2026-08-04 update" below.
 
 ## Purpose
 
-Native Android client for [Agent Portal](https://github.com/sivaram311/agent-portal) (`E:\MyWorkspace\agent-portal`, Spring Boot + Angular). It lets users run and supervise AI coding-agent sessions from a phone instead of only a browser. This is a **separate repo** from `agent-portal` itself (`https://github.com/sivaram311/agent-portal-extended`); it consumes the existing Agent Portal REST/WebSocket API and does not fork or duplicate the backend.
+Native Android client for [Agent Portal](https://github.com/sivaram311/agent-portal) (`E:\MyWorkspace\agent-portal`, Spring Boot + Angular). It lets users run and supervise AI coding-agent sessions from a phone instead of only a browser. This is a **separate repo** from `agent-portal` itself (`https://github.com/sivaram311/agent-portal-extended`); it consumes the existing Agent Portal REST/WebSocket API and does not fork or duplicate the backend. The Android `applicationId`/package (`buzz.delena.agentportal`) and repo name are unchanged - only the user-facing display name changed, to avoid breaking the registered Firebase project and the `buzz.delena.agentportal://oauth/callback` redirect scheme allow-listed in css-next.
+
+## 2026-08-04 update
+
+Triggered by a real support session: the user reported "my app returns 502", which traced to the DEV backend (`:8080`) being down (ops fix, unrelated to this repo), then separately asked for a rename + upgrade. Real functional bugs were found via actual crash/diagnostic uploads from a live device (`E:\MyWorkspace\agent-portal\backend\logs\mobile-diagnostics\2026-07-30\`, not guessed) and fixed in three parallel, non-overlapping `cursor-agent` hires, each independently verified (diff scope + full `./gradlew :app:compileDebugKotlin` build after all three landed - **BUILD SUCCESSFUL**):
+
+1. **Display rename to "Foreman" + v1.0.0 + About label** (`8063353`) - `app_name` string, login/lock-screen text, `versionName`/`versionCode` bumped, and a `"Foreman v1.0.0"` label added to the Manage sheet reading live from `BuildConfig.VERSION_NAME` (CONSCIOUS rule #24 compliance - the app previously showed its version nowhere in the UI). Package/`applicationId` and repo name intentionally unchanged.
+2. **Refresh-token expiry UX** (`0b66fc5`) - the CSS refresh token is never rotated and eventually hits an absolute TTL; a rejected refresh used to silently clear the session with zero explanation. Added a proactive soft-refresh within the existing 120s pre-expiry window (fewer hard 403s in the first place) and a one-shot "session ended, please sign in again" notice distinct from a manual sign-out.
+3. **STOMP WebSocket reconnect hardening** (`78c5c4c`) - real diagnostic logs showed 12-13 WebSocket failures per session (`Socket closed`, `Software caused connection abort`, `Unable to resolve host "delena.buzz"`) from network handoffs. Added a `ConnectivityManager.NetworkCallback` (waits for `NET_CAPABILITY_VALIDATED`, not just connected, before retrying) and exponential backoff (1s-30s cap); transient DNS/socket errors no longer surface as a hard `FAILED` state. Also fixed a second, previously-undocumented bug found during this work: a stale access token at WS-connect time (e.g. sitting on the Chat screen past the ~15min access-token TTL) failed the handshake with **no automatic retry**, silently killing realtime updates until the screen was closed and reopened - now does one refresh-and-reconnect attempt inline.
+
+**Not done in this pass** (separate, larger lift - not blocking the rename/fixes above): the automated-tests gap, the stale README security note, and real on-device FCM push-delivery verification (backend push send path confirmed live and correctly configured - `Firebase push notifications enabled` in the DEV backend's own startup log - but arrival + notification-tap-through was not verified against a real device this session).
 
 ## Tech stack
 
@@ -22,7 +33,7 @@ Derived from `android/` Gradle project and root README:
 | Push | Firebase BOM **33.13.0** (`firebase-messaging-ktx`) |
 | Markdown | Markwon **4.6.2** + prism4j **2.0.0** |
 | Other AndroidX | Navigation Compose **2.9.0**, Biometric **1.2.0-alpha05**, WorkManager **2.10.2**, SplashScreen **1.0.1** |
-| App version | `versionName` `0.4.8-oom-http-log-fix-dev`, `versionCode` **18** |
+| App version | `versionName` **`1.0.0`**, `versionCode` **19** (was `0.4.8-oom-http-log-fix-dev` / 18) |
 | Composition | Manual `NetworkModule` / `AppContainer` (no Hilt/Koin dependency present) |
 
 Default DEV backend URLs in `BuildConfig`: `API_BASE_URL` = `https://delena.buzz`, `WS_BASE_URL` = `wss://delena.buzz`.
