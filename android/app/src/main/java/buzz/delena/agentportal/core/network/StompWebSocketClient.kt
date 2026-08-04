@@ -1,6 +1,15 @@
 package buzz.delena.agentportal.core.network
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.os.Handler
+import android.os.Looper
 import buzz.delena.agentportal.core.data.TokenStore
+import java.net.ConnectException
+import java.net.SocketException
+import java.net.UnknownHostException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
@@ -51,6 +60,14 @@ private data class RawStompFrame(
  * Keeps the socket alive with STOMP heartbeats (client → server newlines)
  * plus OkHttp WebSocket pings, and auto-reconnects while [connect] has been
  * requested and [disconnect] has not.
+ *
+ * Reconnect is connectivity-aware: [ConnectivityManager.NetworkCallback]
+ * pauses retries while the default network is down (wifi↔cellular handoff,
+ * Doze, airplane mode) so we do not hammer DNS during the transition window.
+ * When a network is usable again, reconnect resumes immediately (backoff
+ * reset). Failures that are not "no network" use exponential backoff
+ * (~1s … ~30s). Transient DNS / socket blips stay on the retry path and do
+ * not surface as [ConnectionState.FAILED].
  */
 class StompWebSocketClient(
     private val okHttpClient: OkHttpClient,
@@ -67,6 +84,10 @@ class StompWebSocketClient(
     private val wantConnected = AtomicBoolean(false)
     private val connectRefs = AtomicInteger(0)
     private val reconnectAttempt = AtomicInteger(0)
+    private val hasUsableNetwork = AtomicBoolean(true)
+    private val networkCallbackRegistered = AtomicBoolean(false)
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private val scheduler: ScheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor { r ->
             Thread(r, "stomp-heartbeat").apply { isDaemon = true }
@@ -76,6 +97,7 @@ class StompWebSocketClient(
 
     fun connect() {
         wantConnected.set(true)
+        ensureNetworkMonitoring()
         connectInternal(allowAuthRetry = true)
     }
 
@@ -102,6 +124,12 @@ class StompWebSocketClient(
         if (_connectionState.value == ConnectionState.CONNECTING ||
             _connectionState.value == ConnectionState.CONNECTED
         ) {
+            return
+        }
+        if (!hasUsableNetwork.get()) {
+            // Interface is down / transitioning — wait for NetworkCallback.
+            _connectionState.value = ConnectionState.DISCONNECTED
+            cancelReconnect()
             return
         }
         cancelReconnect()
@@ -161,7 +189,16 @@ class StompWebSocketClient(
                             return
                         }
                     }
-                    _connectionState.value = ConnectionState.FAILED
+                    // Transient DNS / socket aborts (wifi↔cellular, brief
+                    // offline windows) are recoverable — stay on the backoff
+                    // path as DISCONNECTED so the UI does not show a hard
+                    // "Realtime offline" while the next attempt may succeed.
+                    val transient = isTransientNetworkFailure(t)
+                    _connectionState.value = if (transient) {
+                        ConnectionState.DISCONNECTED
+                    } else {
+                        ConnectionState.FAILED
+                    }
                     scheduleReconnectIfWanted()
                     buzz.delena.agentportal.core.diagnostics.AppLog.w(
                         "StompWS",
@@ -213,6 +250,7 @@ class StompWebSocketClient(
 
     fun forceReconnect() {
         wantConnected.set(true)
+        ensureNetworkMonitoring()
         cancelReconnect()
         stopHeartbeat()
         reconnectAttempt.set(0)
@@ -227,6 +265,7 @@ class StompWebSocketClient(
         wantConnected.set(false)
         cancelReconnect()
         stopHeartbeat()
+        stopNetworkMonitoring()
         reconnectAttempt.set(0)
         runCatching { webSocket?.send("DISCONNECT\n\n$NUL") }
         webSocket?.close(NORMAL_CLOSURE_CODE, "client_disconnect")
@@ -234,13 +273,34 @@ class StompWebSocketClient(
         _connectionState.value = ConnectionState.DISCONNECTED
     }
 
-    private fun scheduleReconnectIfWanted() {
+    /**
+     * Schedules a reconnect with exponential backoff (1s, 2s, 4s, … capped
+     * at [MAX_RECONNECT_DELAY_SEC]), unless there is no usable network — in
+     * that case the attempt is deferred until [ConnectivityManager] reports
+     * the default network is back.
+     */
+    private fun scheduleReconnectIfWanted(immediate: Boolean = false) {
         if (!wantConnected.get()) return
         cancelReconnect()
-        val attempt = reconnectAttempt.incrementAndGet().coerceAtMost(6)
-        val delaySec = (1L shl (attempt - 1)).coerceAtMost(30L)
+        if (!hasUsableNetwork.get()) {
+            buzz.delena.agentportal.core.diagnostics.AppLog.d(
+                "StompWS",
+                "Reconnect deferred until network is available",
+            )
+            return
+        }
+        val delaySec = if (immediate) {
+            0L
+        } else {
+            val attempt = reconnectAttempt.incrementAndGet().coerceAtMost(MAX_RECONNECT_ATTEMPT_EXPONENT)
+            (1L shl (attempt - 1)).coerceAtMost(MAX_RECONNECT_DELAY_SEC)
+        }
         reconnectFuture = scheduler.schedule({
             if (!wantConnected.get()) return@schedule
+            if (!hasUsableNetwork.get()) {
+                // Dropped during the backoff wait — NetworkCallback will resume.
+                return@schedule
+            }
             if (_connectionState.value == ConnectionState.CONNECTED ||
                 _connectionState.value == ConnectionState.CONNECTING
             ) {
@@ -254,6 +314,133 @@ class StompWebSocketClient(
     private fun cancelReconnect() {
         reconnectFuture?.cancel(false)
         reconnectFuture = null
+    }
+
+    private fun ensureNetworkMonitoring() {
+        if (!networkCallbackRegistered.compareAndSet(false, true)) return
+        val cm = connectivityManager()
+        if (cm == null) {
+            networkCallbackRegistered.set(false)
+            hasUsableNetwork.set(true)
+            return
+        }
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                onNetworkUsabilityChanged(evaluateNetwork(cm, network))
+            }
+
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                onNetworkUsabilityChanged(isUsable(networkCapabilities))
+            }
+
+            override fun onLost(network: Network) {
+                onNetworkUsabilityChanged(false)
+            }
+        }
+        try {
+            // Seed from the current default network before registering so the
+            // first connect() does not race an empty callback window.
+            hasUsableNetwork.set(evaluateDefaultNetwork(cm))
+            cm.registerDefaultNetworkCallback(callback, mainHandler)
+            networkCallback = callback
+        } catch (e: SecurityException) {
+            networkCallbackRegistered.set(false)
+            networkCallback = null
+            hasUsableNetwork.set(true)
+            buzz.delena.agentportal.core.diagnostics.AppLog.w(
+                "StompWS",
+                "NetworkCallback unavailable; reconnect will use backoff only",
+                e,
+            )
+        } catch (e: RuntimeException) {
+            networkCallbackRegistered.set(false)
+            networkCallback = null
+            hasUsableNetwork.set(true)
+            buzz.delena.agentportal.core.diagnostics.AppLog.w(
+                "StompWS",
+                "NetworkCallback registration failed; reconnect will use backoff only",
+                e,
+            )
+        }
+    }
+
+    private fun stopNetworkMonitoring() {
+        val callback = networkCallback ?: run {
+            networkCallbackRegistered.set(false)
+            return
+        }
+        networkCallback = null
+        networkCallbackRegistered.set(false)
+        val cm = connectivityManager()
+        if (cm != null) {
+            runCatching { cm.unregisterNetworkCallback(callback) }
+        }
+    }
+
+    private fun onNetworkUsabilityChanged(usable: Boolean) {
+        val wasUsable = hasUsableNetwork.getAndSet(usable)
+        if (!wantConnected.get()) return
+        if (!usable) {
+            // Stop blind retries into a dead interface (DNS noise).
+            cancelReconnect()
+            return
+        }
+        if (!wasUsable) {
+            // Network restored after a gap — resume fast, do not keep the
+            // outage-era backoff exponent.
+            reconnectAttempt.set(0)
+            if (_connectionState.value != ConnectionState.CONNECTED &&
+                _connectionState.value != ConnectionState.CONNECTING
+            ) {
+                scheduleReconnectIfWanted(immediate = true)
+            }
+        }
+    }
+
+    private fun connectivityManager(): ConnectivityManager? {
+        val ctx = resolveApplicationContext() ?: return null
+        return ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+    }
+
+    /**
+     * AppContainer does not pass a Context into this client (and parallel
+     * work owns that wiring). Resolve the process Application, which is
+     * available by the time [connect] / [acquire] runs.
+     */
+    private fun resolveApplicationContext(): Context? {
+        return try {
+            val activityThread = Class.forName("android.app.ActivityThread")
+            val app = activityThread.getMethod("currentApplication").invoke(null)
+            (app as? Context)?.applicationContext
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun evaluateDefaultNetwork(cm: ConnectivityManager): Boolean {
+        return try {
+            val network = cm.activeNetwork ?: return false
+            evaluateNetwork(cm, network)
+        } catch (_: SecurityException) {
+            true
+        }
+    }
+
+    private fun evaluateNetwork(cm: ConnectivityManager, network: Network): Boolean {
+        return try {
+            isUsable(cm.getNetworkCapabilities(network))
+        } catch (_: SecurityException) {
+            true
+        }
+    }
+
+    private fun isUsable(caps: NetworkCapabilities?): Boolean {
+        if (caps == null) return false
+        // INTERNET + VALIDATED ≈ real outbound path (DNS/captive portal
+        // cleared). Waiting for VALIDATED avoids reconnect storms during the
+        // brief unvalidated window of a wifi↔cellular handoff.
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
     private fun startHeartbeat(clientSendMs: Long) {
@@ -348,5 +535,30 @@ class StompWebSocketClient(
         val CONNECT_FRAME = "CONNECT\naccept-version:1.2\nheart-beat:10000,10000\n\n$NUL"
         const val NORMAL_CLOSURE_CODE = 1000
         const val DEFAULT_CLIENT_HEARTBEAT_MS = 10_000L
+        /** Cap of the attempt exponent so delay stays at [MAX_RECONNECT_DELAY_SEC]. */
+        const val MAX_RECONNECT_ATTEMPT_EXPONENT = 6
+        const val MAX_RECONNECT_DELAY_SEC = 30L
+
+        fun isTransientNetworkFailure(t: Throwable): Boolean {
+            if (t is UnknownHostException || t is ConnectException || t is SocketException) {
+                return true
+            }
+            var cur: Throwable? = t
+            while (cur != null) {
+                if (cur is UnknownHostException) return true
+                val msg = cur.message.orEmpty()
+                if (msg.contains("Unable to resolve host", ignoreCase = true) ||
+                    msg.contains("Software caused connection abort", ignoreCase = true) ||
+                    msg.contains("Socket closed", ignoreCase = true) ||
+                    msg.contains("Connection reset", ignoreCase = true) ||
+                    msg.contains("Network is unreachable", ignoreCase = true) ||
+                    msg.contains("failed to connect", ignoreCase = true)
+                ) {
+                    return true
+                }
+                cur = cur.cause
+            }
+            return false
+        }
     }
 }
