@@ -25,8 +25,17 @@ Prioritized tracks for the native Android client (and future extended-features s
 | **P0 subagents** | Sub-agents sheet + abandon (Logs-tab parity) | **Done `v0.4.6-subagents-crash-fix-dev`** |
 | **P0 diagnostics** | Send diagnostics + crash dump upload to portal | **Done `v0.4.7-diagnostics-dev`** |
 | **P0 OOM tools** | Stop BODY HTTP log + compact `/tools` (45MB session crash) | **Done `v0.4.8-oom-http-log-fix-dev`** |
+| **P0 rename + fixes** | Foreman rename, About label, refresh-token UX, WS reconnect hardening | **Done `v1.0.0`** |
 | P2 | Firebase Cloud Messaging on-device proof | Code live; arrival unverified |
 | P2 | Device Lab E2E on Realme P2 Pro | Blocked — no ADB |
+
+## CONSCIOUS #16 waiver (release tags on this project)
+
+**Status:** user-directed waiver, 2026-08-04 — applies to this project only, until ADB access exists.
+
+CONSCIOUS #16 normally requires Device Lab E2E on DEV before any annotated release tag ("Missing DEV E2E → NO-GO for tag"). This project cannot satisfy that gate structurally — there is no ADB access on the build host (see the "Device Lab E2E … Blocked — no ADB" row above), so Device Lab E2E has never been runnable here, not even once, for any prior tag either.
+
+The user explicitly waived the gate for this project: *"apk e2e does not apply for this project alone. since adb required."* Tags on `agent-portal-extended` therefore proceed on Reviewer SIGN-OFF + a successful local build (`./gradlew :app:assembleDebug` / `compileDebugKotlin`) as the smoke bar, without Device Lab E2E evidence, until ADB access is available. This is a standing, documented exception for this repo — re-confirm with the user if picking this up much later, rather than assuming it's still current.
 
 ## Happy path (shipped)
 
