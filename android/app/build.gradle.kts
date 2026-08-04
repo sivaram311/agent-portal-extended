@@ -41,6 +41,18 @@ android {
         }
     }
 
+    // Match this repo's existing release-artifact convention (see the
+    // agent-portal-extended-<version>.apk files at repo root from prior
+    // releases) instead of leaving Gradle's generic app-debug.apk /
+    // app-release.apk default output names.
+    applicationVariants.all {
+        val variant = this
+        variant.outputs.all {
+            val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            output.outputFileName = "foreman-${variant.versionName}-${variant.buildType.name}.apk"
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
