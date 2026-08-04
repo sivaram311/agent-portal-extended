@@ -46,6 +46,7 @@ class AuthRepository(
         return try {
             tokenStore.saveTokens(tokenResponse.accessToken, tokenResponse.refreshToken)
             tokenStore.saveAuthMethod(AuthMethod.SSO)
+            TokenRefresher.clearSessionEndedByRejectedRefresh()
             Result.success(Unit)
         } catch (t: Throwable) {
             Result.failure(t)
@@ -71,6 +72,7 @@ class AuthRepository(
             )
             tokenStore.saveTokens(response.accessToken, response.refreshToken)
             tokenStore.saveAuthMethod(AuthMethod.PASSWORD)
+            TokenRefresher.clearSessionEndedByRejectedRefresh()
             Result.success(Unit)
         } catch (t: Throwable) {
             Result.failure(t)
@@ -105,7 +107,22 @@ class AuthRepository(
 
     fun authSessionInfo(): AuthSessionInfo = AuthSessionInfo.from(tokenStore)
 
+    /**
+     * One-shot for [buzz.delena.agentportal.ui.viewmodel.AuthViewModel]: shows
+     * on the login screen after a rejected-refresh clear, not after manual logout.
+     */
+    fun consumeSessionEndedNotice(): String? =
+        if (TokenRefresher.consumeSessionEndedByRejectedRefresh()) SESSION_ENDED_NOTICE else null
+
+    /**
+     * Manual sign-out. Does **not** clear [TokenRefresher]'s rejected-refresh
+     * notice so the login screen can still explain an involuntary session end.
+     */
     fun logout() {
         tokenStore.clear()
+    }
+
+    companion object {
+        const val SESSION_ENDED_NOTICE = "Session ended - please sign in again"
     }
 }

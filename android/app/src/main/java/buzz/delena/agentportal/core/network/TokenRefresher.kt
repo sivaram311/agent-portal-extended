@@ -36,6 +36,38 @@ object TokenRefresher {
     private val lock = Any()
 
     /**
+     * Set when [tryRefresh] clears the token store after a definitive 4xx
+     * rejection. Survives until [consumeSessionEndedByRejectedRefresh] so the
+     * UI can explain the surprise logout (status strip + login screen) without
+     * treating a normal manual sign-out the same way.
+     */
+    @Volatile
+    private var sessionEndedByRejectedRefresh: Boolean = false
+
+    /** True after a rejected-refresh clear until consumed (or cleared on login). */
+    fun hasSessionEndedByRejectedRefresh(): Boolean = sessionEndedByRejectedRefresh
+
+    /**
+     * One-shot read for AuthViewModel / login: returns true once, then clears.
+     * Manual [buzz.delena.agentportal.core.data.AuthRepository.logout] does
+     * not clear this, so the login screen can still show the explanation.
+     */
+    fun consumeSessionEndedByRejectedRefresh(): Boolean {
+        synchronized(lock) {
+            val pending = sessionEndedByRejectedRefresh
+            sessionEndedByRejectedRefresh = false
+            return pending
+        }
+    }
+
+    /** Drop a stale notice after a successful sign-in. */
+    fun clearSessionEndedByRejectedRefresh() {
+        synchronized(lock) {
+            sessionEndedByRejectedRefresh = false
+        }
+    }
+
+    /**
      * Returns true if a new access token was obtained and saved.
      *
      * [clearOnFailure] only clears storage when the auth server explicitly
@@ -56,23 +88,26 @@ object TokenRefresher {
             }
 
             val newTokens = result.getOrNull()
-        if (newTokens != null) {
-            tokenStore.saveTokens(newTokens.accessToken, newTokens.refreshToken)
-            return true
-        }
+            if (newTokens != null) {
+                tokenStore.saveTokens(newTokens.accessToken, newTokens.refreshToken)
+                return true
+            }
 
-        val failure = result.exceptionOrNull()
-        android.util.Log.w("TokenRefresher", "Token refresh failed", failure)
-        buzz.delena.agentportal.core.diagnostics.DiagnosticLogBuffer.append(
-            "W",
-            "TokenRefresher",
-            "Token refresh failed: ${failure?.message}",
-            failure,
-        )
+            val failure = result.exceptionOrNull()
+            android.util.Log.w("TokenRefresher", "Token refresh failed", failure)
+            buzz.delena.agentportal.core.diagnostics.DiagnosticLogBuffer.append(
+                "W",
+                "TokenRefresher",
+                "Token refresh failed: ${failure?.message}",
+                failure,
+            )
             val rejectedByServer = failure is RefreshRejectedException
             // Automatic paths clear only on definitive auth rejection so a
             // flaky network does not kick the user out while JWT TTL still shows.
             if (clearOnFailure && rejectedByServer) {
+                // Flag before clear so the status strip / login can explain
+                // why the session disappeared (refresh TTL, not user sign-out).
+                sessionEndedByRejectedRefresh = true
                 tokenStore.clear()
             }
             return false

@@ -30,7 +30,26 @@ import okhttp3.Response
 class TokenAuthenticator(private val tokenStore: TokenStore) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
-        val request = chain.request()
+        var request = chain.request()
+
+        // Soft proactive refresh in the same ~120s window the session-list
+        // status poll uses, so REST calls renew before a hard 403 mid-request.
+        // clearOnFailure=false: a flaky refresh must not wipe a still-valid JWT.
+        val preInfo = AuthSessionInfo.from(tokenStore)
+        val secondsLeft = preInfo.accessTokenExpiresInSeconds
+        if (tokenStore.getRefreshToken() != null &&
+            secondsLeft != null &&
+            secondsLeft in 1L..PROACTIVE_REFRESH_WITHIN_SECONDS
+        ) {
+            if (TokenRefresher.tryRefresh(tokenStore, clearOnFailure = false)) {
+                tokenStore.getAccessToken()?.let { newToken ->
+                    request = request.newBuilder()
+                        .header("Authorization", "Bearer $newToken")
+                        .build()
+                }
+            }
+        }
+
         val response = chain.proceed(request)
 
         if (response.code != 403 || tokenStore.getRefreshToken() == null) {
@@ -43,7 +62,8 @@ class TokenAuthenticator(private val tokenStore: TokenStore) : Interceptor {
         // a failed refresh is treated as transient (network) — do not clear.
         val info = AuthSessionInfo.from(tokenStore)
         val accessNearExpiry = info.accessTokenExpired ||
-            (info.accessTokenExpiresInSeconds != null && info.accessTokenExpiresInSeconds <= 120L)
+            (info.accessTokenExpiresInSeconds != null &&
+                info.accessTokenExpiresInSeconds <= PROACTIVE_REFRESH_WITHIN_SECONDS)
         val refreshed = TokenRefresher.tryRefresh(
             tokenStore,
             clearOnFailure = accessNearExpiry,
@@ -60,5 +80,9 @@ class TokenAuthenticator(private val tokenStore: TokenStore) : Interceptor {
             .header("Authorization", "Bearer $newToken")
             .build()
         return chain.proceed(retried)
+    }
+
+    private companion object {
+        const val PROACTIVE_REFRESH_WITHIN_SECONDS = 120L
     }
 }

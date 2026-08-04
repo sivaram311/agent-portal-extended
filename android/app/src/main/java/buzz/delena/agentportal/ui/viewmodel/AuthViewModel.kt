@@ -59,6 +59,14 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
     private var pendingAuthRequest: AuthorizationRequest? = null
     private var authorizationService: AuthorizationService? = null
 
+    init {
+        // One-shot: rejected-refresh clear (not manual sign-out) leaves a notice
+        // for the login screen so the user sees why they were kicked out.
+        authRepository.consumeSessionEndedNotice()?.let { notice ->
+            _state.value = _state.value.copy(error = notice)
+        }
+    }
+
     fun onUsernameChange(value: String) {
         _state.value = _state.value.copy(username = value, error = null)
     }

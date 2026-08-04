@@ -34,8 +34,10 @@ import androidx.compose.ui.unit.dp
 import buzz.delena.agentportal.BuildConfig
 import buzz.delena.agentportal.R
 import buzz.delena.agentportal.core.data.AuthMethod
+import buzz.delena.agentportal.core.data.AuthRepository
 import buzz.delena.agentportal.core.data.AuthSessionInfo
 import buzz.delena.agentportal.core.network.ConnectionState
+import buzz.delena.agentportal.core.network.TokenRefresher
 import buzz.delena.agentportal.theme.AgentPortalTheme
 import buzz.delena.agentportal.theme.ApColors
 
@@ -52,10 +54,12 @@ data class ConnectionStatusUi(
     val canReconnect: Boolean,
     val realtimeLabel: String? = null,
     val realtimeTone: StatusTone = StatusTone.Muted,
+    /** Set when a rejected refresh cleared the store — not a manual sign-out. */
+    val sessionEndedNotice: String? = null,
 ) {
     val tone: StatusTone
         get() = when {
-            needsSignIn -> StatusTone.Negative
+            needsSignIn || sessionEndedNotice != null -> StatusTone.Negative
             needsReconnect || realtimeTone == StatusTone.Negative -> StatusTone.Attention
             realtimeTone == StatusTone.Positive -> StatusTone.Positive
             else -> StatusTone.Muted
@@ -73,6 +77,12 @@ data class ConnectionStatusUi(
                 ConnectionState.FAILED -> "Realtime offline" to StatusTone.Negative
                 ConnectionState.DISCONNECTED -> "Realtime idle" to StatusTone.Muted
             }
+            val endedNotice =
+                if (TokenRefresher.hasSessionEndedByRejectedRefresh()) {
+                    AuthRepository.SESSION_ENDED_NOTICE
+                } else {
+                    null
+                }
             return ConnectionStatusUi(
                 authMethodLabel = info.authMethod.label,
                 subject = info.subject,
@@ -86,6 +96,7 @@ data class ConnectionStatusUi(
                 canReconnect = info.canReconnect,
                 realtimeLabel = label,
                 realtimeTone = tone,
+                sessionEndedNotice = endedNotice,
             )
         }
     }
@@ -150,9 +161,10 @@ fun ConnectionStatusBar(
             }
         }
         Text(
-            text = "${status.tokenStateLabel} · ${status.refreshStateLabel}",
+            text = status.sessionEndedNotice
+                ?: "${status.tokenStateLabel} · ${status.refreshStateLabel}",
             style = MaterialTheme.typography.labelMedium,
-            color = ApColors.TextMuted,
+            color = if (status.sessionEndedNotice != null) ApColors.Danger else ApColors.TextMuted,
             modifier = Modifier.padding(top = 2.dp, start = 16.dp),
         )
     }
@@ -198,9 +210,10 @@ fun ConnectionAccountSheet(
             if (!status.realtimeLabel.isNullOrBlank()) {
                 StatusRow("Realtime", status.realtimeLabel)
             }
-            if (status.needsSignIn) {
+            if (status.needsSignIn || status.sessionEndedNotice != null) {
                 Text(
-                    text = "Session cannot be recovered here - sign out and sign in again.",
+                    text = status.sessionEndedNotice
+                        ?: "Session cannot be recovered here - sign out and sign in again.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = ApColors.Danger,
                     modifier = Modifier.padding(top = 12.dp),
