@@ -116,10 +116,14 @@ class SessionRepository(
             PromptSendOutcome.Sent
         } catch (t: Throwable) {
             if (t.isRecoverablePromptFailure()) {
+                // Counts against the cap even though no flush ran: a 5xx while the
+                // device is online gets no connectivity callback to retry it, so
+                // without this the bubble would sit on "Queued" forever.
+                val nextRetryCount = pending.retryCount + 1
                 pendingPromptDao.updateStatus(
                     id = pending.id,
-                    status = PendingPromptEntity.STATUS_PENDING,
-                    retryCount = pending.retryCount,
+                    status = pendingStatusFor(nextRetryCount),
+                    retryCount = nextRetryCount,
                 )
                 PromptSendOutcome.Queued
             } else {
@@ -144,17 +148,25 @@ class SessionRepository(
                     val message = api.sendPrompt(pending.sessionId, PromptRequest(pending.content))
                     messageDao.upsert(message.toEntity())
                     pendingPromptDao.deleteById(pending.id)
-                } catch (_: Throwable) {
+                } catch (t: Throwable) {
+                    if (!t.isRecoverablePromptFailure()) {
+                        // A 4xx will fail the same way forever; park it as FAILED so the
+                        // user still sees their text, and let the rest of the queue through.
+                        pendingPromptDao.updateStatus(
+                            id = pending.id,
+                            status = PendingPromptEntity.STATUS_FAILED,
+                            retryCount = pending.retryCount,
+                        )
+                        return@forEach
+                    }
                     val nextRetryCount = pending.retryCount + 1
                     pendingPromptDao.updateStatus(
                         id = pending.id,
-                        status = if (nextRetryCount >= MAX_PENDING_RETRIES) {
-                            PendingPromptEntity.STATUS_FAILED
-                        } else {
-                            PendingPromptEntity.STATUS_PENDING
-                        },
+                        status = pendingStatusFor(nextRetryCount),
                         retryCount = nextRetryCount,
                     )
+                    // Stop on the first recoverable failure: the prompts behind this one
+                    // must not overtake it.
                     return@withLock
                 }
             }
@@ -289,6 +301,13 @@ class SessionRepository(
         sequenceNo = sequenceNo,
         createdAt = createdAt,
     )
+
+    private fun pendingStatusFor(retryCount: Int): String =
+        if (retryCount >= MAX_PENDING_RETRIES) {
+            PendingPromptEntity.STATUS_FAILED
+        } else {
+            PendingPromptEntity.STATUS_PENDING
+        }
 
     private companion object {
         const val MAX_PENDING_RETRIES = 5

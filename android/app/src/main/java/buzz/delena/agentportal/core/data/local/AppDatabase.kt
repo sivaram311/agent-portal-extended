@@ -29,6 +29,10 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DATABASE_NAME,
                 )
+                    // Safe for the v1 -> v2 bump only because sessions/messages are a
+                    // rebuildable cache of server state. pending_prompts holds text the
+                    // user wrote and the server has never seen, so the next schema bump
+                    // needs a real Migration rather than another destructive fallback.
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                     .also { instance = it }

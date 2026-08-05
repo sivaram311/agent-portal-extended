@@ -8,8 +8,8 @@
 | Field | Value |
 |-------|-------|
 | versionName | `1.1.0` · versionCode **20** |
-| APK | `foreman-1.1.0-debug.apk` (GitHub release asset on tag `v1.1.0`; `*.apk` is gitignored) |
-| APK SHA-256 | `FCBCA02356A26E1FE25AF3D8C4CDB70B56A2C3A2EBA8B54870FA592934D27F29` |
+| APK | `foreman-1.1.0-debug.apk` — published as the `v1.1.0` GitHub release asset, since `*.apk` is gitignored |
+| APK SHA-256 | `C44555A42620519754B02FEF50391936C7CC80AAB9B2021F5C59B4DB39777C89` |
 
 ## v1.1.0 — Offline prompt queue + workspace picker
 
@@ -21,7 +21,9 @@ queued, anything else (4xx, parse errors) deletes it and surfaces the existing e
 A `ConnectivityObserver` (`ConnectivityManager.NetworkCallback`, waits for `NET_CAPABILITY_VALIDATED`)
 flushes the session's queue FIFO on reconnect; a shared mutex keeps that flush from racing the
 in-flight direct send. Five failed attempts mark the row `FAILED`, which renders as
-`Failed – tap to retry`. The STOMP `assistant_delta` streaming path is untouched.
+`Failed – tap to retry`. A flush stops at the first still-retryable prompt so later prompts cannot
+overtake it, but parks a permanently-rejected one as `FAILED` and carries on. The STOMP
+`assistant_delta` streaming path is untouched.
 
 **Workspace picker.** `CreateSessionSheet` no longer hard-codes `demo`. It shows `demo` plus the last
 8 workspace paths used on this device (DataStore Preferences, `workspace_preferences`) as chips, with
