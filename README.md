@@ -4,17 +4,19 @@ Native Android client (and future extended-features surface) for **[Agent Portal
 
 This is a **separate repo** from `agent-portal` itself: `https://github.com/sivaram311/agent-portal-extended` (public). It talks to the existing Agent Portal REST/WebSocket API; it does not fork or duplicate the backend.
 
-**Status:** `v1.0.0` (versionCode 19). Display name Foreman; name+version shown in Manage sheet.
+**Status:** `v1.1.0` (versionCode 20). Display name Foreman; name+version shown in Manage sheet.
 
 ## Features
 
 Built:
 
+- **Offline prompt queue** — a prompt sent while offline (or into a network error / 5xx) is stored in Room and shown in the thread as `Queued`; a `ConnectivityManager` callback flushes the queue FIFO when the network validates, retrying up to 5 times before the bubble becomes `Failed – tap to retry`. Queued prompts survive a process restart; the error banner is now reserved for non-recoverable failures
+- **Workspace picker on create** — the create sheet offers `demo` plus the last 8 workspaces used on this device (DataStore) and an optional free-text path, instead of always hard-coding `demo`
 - **Connection status strip** â€” Sessions + Chat show Password/SSO (persisted at login), JWT subject, access-token TTL, refresh readiness, auth host; Chat also shows Live / Connecting / Offline (tap to expand)
 - **Prompt-safe timeouts** â€” REST read 5m / call 6m so ACP handshake on `POST /prompt` does not abort as nginx 499
 - **STOMP keep-alive** â€” client heartbeats + OkHttp WS pings + auto-reconnect with backoff; resubscribe on reconnect
 - **Claude-style thread** â€” collapsible â€œRan N tools / files changedâ€ chips; Activity timeline sheet; tool detail (monospace + line numbers + Raw/Render); Changes sheet with green/red diff + Keep/Restore; thumb-zone composer (Auto / attach / mic)
-- **Happy-path supervisor loop** â€” All / Needs you / Running / Failed filters; thin create (Cursor|Antigravity + demo); Decision bottom sheet; Cancel/Archive; notification tap â†’ Chat
+- **Happy-path supervisor loop** â€” All / Needs you / Running / Failed filters; create (Cursor|Antigravity + workspace picker); Decision bottom sheet; Cancel/Archive; notification tap â†’ Chat
 - Compose UI â€” login screen, session list, chat/transcript screen with a Claude-app-like UX, styled in Agent Portal's own **navy/teal** branding (not Anthropic's)
 - Retrofit/OkHttp networking layer against the existing Agent Portal REST API
 - Hand-rolled STOMP-over-WebSocket client for realtime session streaming (`/ws/websocket` on the portal backend)
@@ -35,6 +37,7 @@ Not yet done / explicitly deferred (see [ROADMAP.md](ROADMAP.md)):
 - Formal Device Lab E2E of SSO on Realme P2 Pro
 - A real push notification arriving on a real device (no ADB on this build host)
 - Remaining portal tabs (Code / Guidance / Console) — Sub-agents shipped in v0.4.6
+- Server-side workspace discovery — the picker is device-local; no `GET /api/workspaces` endpoint exists on the backend today and none was invented here
 
 ## SSO notes
 

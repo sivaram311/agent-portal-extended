@@ -1,11 +1,41 @@
 # AI-DLC Inception Baseline - agent-portal-extended (app display name: Foreman)
 
 **Captured:** 2026-08-01 (as-is snapshot, not a target design)
+**Updated:** 2026-08-06 - v1.1.0 offline prompt queue + workspace picker, see "2026-08-06 update" below.
 **Updated:** 2026-08-04 - display rename to **Foreman** + v1.0.0 + three real bugfixes, see "2026-08-04 update" below.
 
 ## Purpose
 
 Native Android client for [Agent Portal](https://github.com/sivaram311/agent-portal) (`E:\MyWorkspace\agent-portal`, Spring Boot + Angular). It lets users run and supervise AI coding-agent sessions from a phone instead of only a browser. This is a **separate repo** from `agent-portal` itself (`https://github.com/sivaram311/agent-portal-extended`); it consumes the existing Agent Portal REST/WebSocket API and does not fork or duplicate the backend. The Android `applicationId`/package (`buzz.delena.agentportal`) and repo name are unchanged - only the user-facing display name changed, to avoid breaking the registered Firebase project and the `buzz.delena.agentportal://oauth/callback` redirect scheme allow-listed in css-next.
+
+## 2026-08-06 update
+
+Two user-requested features, built in one pass and verified with `./gradlew :app:compileDebugKotlin`
+and `:app:assembleDebug` (no device — see the ADB gap below):
+
+1. **Offline prompt queueing (P0).** New Room table `pending_prompts` (`PendingPromptEntity` /
+   `PendingPromptDao`), AppDatabase **v1 → v2** with `fallbackToDestructiveMigration(dropAllTables = true)`
+   (acceptable while the local store is a rebuildable cache of server state). `SessionRepository`
+   gained `enqueuePendingPrompt` / `attemptPendingPrompt` / `flushPendingPrompts` / `retryPendingPrompt`,
+   serialized behind one mutex so the connectivity-triggered flush cannot double-send a prompt whose
+   first attempt is still in flight. Only `IOException` and 5xx keep a row queued; other failures drop
+   it and fall through to the pre-existing error banner. New `ConnectivityObserver` wraps
+   `ConnectivityManager.NetworkCallback` as a `Flow<Boolean>` (adds the `ACCESS_NETWORK_STATE`
+   permission) and flushes on reconnect. `ChatMessageItem` carries a `MessageDeliveryStatus`
+   (`Queued` / `Sending…` / `Failed – tap to retry`). This is deliberately separate from the
+   `StompWebSocketClient`'s own internal connectivity monitoring, which serves WS reconnect only.
+2. **Workspace picker on create (P1, phase 1).** New `WorkspacePreferences` (DataStore Preferences,
+   max 8 entries, `demo` not stored since it is always offered) feeding recent-workspace chips plus a
+   collapsible free-text path in `CreateSessionSheet`. `SessionListViewModel.createSession` records
+   the path only on success. Phase 2 (`GET /api/workspaces`) is documented in `ROADMAP.md` and
+   deliberately **not** implemented — that endpoint does not exist on the backend.
+
+Also folded in a previously uncommitted working-tree fix that had been sitting in the baseline's
+"known debt" list: `HttpErrorMessages.kt` now maps raw Hibernate/JDBC "database has been closed"
+jargon to actionable copy instead of showing the stack-trace text to the user.
+
+**Still not done in this pass:** the automated-tests gap (still zero test sources), real on-device
+verification of any of the above (no ADB), and the stale README security note.
 
 ## 2026-08-04 update
 
@@ -33,7 +63,7 @@ Derived from `android/` Gradle project and root README:
 | Push | Firebase BOM **33.13.0** (`firebase-messaging-ktx`) |
 | Markdown | Markwon **4.6.2** + prism4j **2.0.0** |
 | Other AndroidX | Navigation Compose **2.9.0**, Biometric **1.2.0-alpha05**, WorkManager **2.10.2**, SplashScreen **1.0.1** |
-| App version | `versionName` **`1.0.0`**, `versionCode` **19** (was `0.4.8-oom-http-log-fix-dev` / 18) |
+| App version | `versionName` **`1.1.0`**, `versionCode` **20** (was `1.0.0` / 19) |
 | Composition | Manual `NetworkModule` / `AppContainer` (no Hilt/Koin dependency present) |
 
 Default DEV backend URLs in `BuildConfig`: `API_BASE_URL` = `https://delena.buzz`, `WS_BASE_URL` = `wss://delena.buzz`.
@@ -49,7 +79,7 @@ Default DEV backend URLs in `BuildConfig`: `API_BASE_URL` = `https://delena.buzz
 - EncryptedSharedPreferences for JWT storage; biometric / device-credential `AppLockGate` when a session is stored (fails open with warning if neither configured)
 
 **Sessions list**
-- List/create sessions (providers Cursor | Antigravity; thin create with workspace `demo`)
+- List/create sessions (providers Cursor | Antigravity; workspace picker: `demo` + last 8 device-local paths + free-text)
 - Filters: All / Needs you / Running / Failed
 - Connection status strip (Password/SSO, JWT subject, TTL, refresh readiness, auth host)
 - Pull-to-refresh; Manage sheet with Reconnect, Sign out, Send diagnostics
@@ -57,6 +87,7 @@ Default DEV backend URLs in `BuildConfig`: `API_BASE_URL` = `https://delena.buzz
 **Chat / supervisor loop**
 - Transcript with Claude-style thread UX (navy/teal branding): collapsible tool/files chips, Activity timeline, tool detail (Raw/Render), Changes sheet (diff + Keep/Restore), Sub-agents sheet (abandon)
 - Live STOMP streaming (`assistant_delta` / `thinking_delta`); Decision bottom sheet (permission/plan); Cancel / Archive
+- Offline prompt queue (Room `pending_prompts`, connectivity-triggered FIFO flush, Queued / Sending / Failed bubble states)
 - Composer with `imePadding()`; thumb-zone Auto / attach / mic affordances (as documented in README)
 - Prompt-safe REST timeouts (read 5m / call 6m); STOMP keep-alive (client heartbeats + OkHttp WS pings + auto-reconnect with resubscribe)
 - Client header `X-Agent-Portal-Client: android` for portal rate-limit exemption
@@ -101,7 +132,7 @@ Default DEV backend URLs in `BuildConfig`: `API_BASE_URL` = `https://delena.buzz
 - **Portal UI parity incomplete:** Code / Guidance / Console tabs not in Android client (README deferred; Sub-agents shipped v0.4.6)
 - **Stale README Security note** (password-only claim vs shipped SSO) — see Deploy topology
 - **No `TODO`/`FIXME` comments** found under `android/` Kotlin sources at inspection time
-- Unrelated working-tree change present at capture time (not part of this baseline doc): modified `android/.../HttpErrorMessages.kt`
+- The `HttpErrorMessages.kt` working-tree change noted at capture time was committed in the 2026-08-06 pass
 
 ## Sources consulted
 

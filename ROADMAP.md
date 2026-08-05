@@ -26,6 +26,9 @@ Prioritized tracks for the native Android client (and future extended-features s
 | **P0 diagnostics** | Send diagnostics + crash dump upload to portal | **Done `v0.4.7-diagnostics-dev`** |
 | **P0 OOM tools** | Stop BODY HTTP log + compact `/tools` (45MB session crash) | **Done `v0.4.8-oom-http-log-fix-dev`** |
 | **P0 rename + fixes** | Foreman rename, About label, refresh-token UX, WS reconnect hardening | **Done `v1.0.0`** |
+| **P0 offline prompts** | Durable Room queue, reconnect flush, and queued/sending/failed chat states | **Done `v1.1.0`** |
+| **P1 workspace picker** | Recent workspace chips + custom path, persisted locally | **Done `v1.1.0`** |
+| P2 | Backend workspace discovery | Future: if `GET /api/workspaces` is added, merge its results into the picker; no endpoint is assumed today |
 | P2 | Firebase Cloud Messaging on-device proof | Code live; arrival unverified |
 | P2 | Device Lab E2E on Realme P2 Pro | Blocked — no ADB |
 

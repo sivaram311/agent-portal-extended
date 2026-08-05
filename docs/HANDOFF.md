@@ -7,8 +7,31 @@
 
 | Field | Value |
 |-------|-------|
-| versionName | `0.4.8-oom-http-log-fix-dev` · versionCode **18** |
-| APK SHA-256 | `EF6F3E79F5F8D2549F38049CBE5F5E99A39F7B702D086ECAFB7FB4EDE82BD759` |
+| versionName | `1.1.0` · versionCode **20** |
+| APK | `foreman-1.1.0-debug.apk` (GitHub release asset on tag `v1.1.0`; `*.apk` is gitignored) |
+| APK SHA-256 | `FCBCA02356A26E1FE25AF3D8C4CDB70B56A2C3A2EBA8B54870FA592934D27F29` |
+
+## v1.1.0 — Offline prompt queue + workspace picker
+
+**Offline queue.** `sendPrompt` no longer restores the draft and shows a banner when the network is
+down. Every prompt is written to a new Room table (`pending_prompts`, AppDatabase v2, destructive
+fallback) before the request goes out, so the bubble renders immediately as `Queued` and survives a
+process restart. `SessionRepository` classifies the failure: `IOException` or 5xx keeps the row
+queued, anything else (4xx, parse errors) deletes it and surfaces the existing error banner.
+A `ConnectivityObserver` (`ConnectivityManager.NetworkCallback`, waits for `NET_CAPABILITY_VALIDATED`)
+flushes the session's queue FIFO on reconnect; a shared mutex keeps that flush from racing the
+in-flight direct send. Five failed attempts mark the row `FAILED`, which renders as
+`Failed – tap to retry`. The STOMP `assistant_delta` streaming path is untouched.
+
+**Workspace picker.** `CreateSessionSheet` no longer hard-codes `demo`. It shows `demo` plus the last
+8 workspace paths used on this device (DataStore Preferences, `workspace_preferences`) as chips, with
+a collapsible free-text path field. The chosen path is recorded only after the create call succeeds.
+No backend endpoint was invented — if `GET /api/workspaces` is added later, merge it into the same
+chip list.
+
+**Known gap:** no ADB on this build host, so this ships on build + review evidence under the
+CONSCIOUS #16 waiver recorded in `ROADMAP.md`. The queue transitions have not been exercised on a
+real device.
 
 ## v0.4.8 — OOM crash fix (diagnostics-proven)
 
