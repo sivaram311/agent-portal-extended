@@ -52,6 +52,7 @@ import buzz.delena.agentportal.ui.components.ChatInputBar
 import buzz.delena.agentportal.ui.components.ConnectionAccountSheet
 import buzz.delena.agentportal.ui.components.ConnectionStatusBar
 import buzz.delena.agentportal.ui.components.MessageBubble
+import buzz.delena.agentportal.ui.components.MessageDeliveryStatus
 import buzz.delena.agentportal.ui.components.StatusPill
 import buzz.delena.agentportal.ui.components.SubagentsSheet
 import buzz.delena.agentportal.ui.components.ToolDetailSheet
@@ -65,6 +66,7 @@ data class ChatMessageItem(
     val isUser: Boolean,
     val contentMarkdown: String,
     val timeLabel: String,
+    val deliveryStatus: MessageDeliveryStatus? = null,
 )
 
 enum class ToolCategory {
@@ -157,6 +159,7 @@ fun ChatScreen(
     state: ChatUiState,
     onPromptChange: (String) -> Unit,
     onSendPrompt: () -> Unit,
+    onRetryPrompt: (String) -> Unit = {},
     onOpenDecisionSheet: () -> Unit,
     onDismissSheet: () -> Unit,
     onOpenToolsSheet: () -> Unit,
@@ -335,6 +338,8 @@ fun ChatScreen(
                             isUser = message.isUser,
                             contentMarkdown = message.contentMarkdown,
                             timeLabel = message.timeLabel,
+                            deliveryStatus = message.deliveryStatus,
+                            onRetry = { onRetryPrompt(message.id.removePrefix("pending-")) },
                         )
                         // Attach activity chips under the latest assistant turn only.
                         val isLatestAssistant = !message.isUser && message.id == state.messages.lastOrNull { !it.isUser }?.id

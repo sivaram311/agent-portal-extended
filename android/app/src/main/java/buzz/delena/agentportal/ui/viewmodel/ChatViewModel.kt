@@ -5,8 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import buzz.delena.agentportal.core.data.AuthRepository
+import buzz.delena.agentportal.core.data.PromptSendOutcome
 import buzz.delena.agentportal.core.data.SessionRepository
 import buzz.delena.agentportal.core.data.local.MessageEntity
+import buzz.delena.agentportal.core.data.local.PendingPromptEntity
+import buzz.delena.agentportal.core.network.ConnectivityObserver
 import buzz.delena.agentportal.core.network.ConnectionState
 import buzz.delena.agentportal.core.network.NetworkModule
 import buzz.delena.agentportal.core.network.StompWebSocketClient
@@ -18,6 +21,7 @@ import buzz.delena.agentportal.ui.activity.ChipKind
 import buzz.delena.agentportal.ui.activity.SubagentItem
 import buzz.delena.agentportal.ui.activity.ToolActivity
 import buzz.delena.agentportal.ui.components.ConnectionStatusUi
+import buzz.delena.agentportal.ui.components.MessageDeliveryStatus
 import buzz.delena.agentportal.ui.components.countDiffLines
 import buzz.delena.agentportal.ui.screens.ChatMessageItem
 import buzz.delena.agentportal.ui.screens.ChatSheet
@@ -30,6 +34,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.isActive
@@ -39,6 +44,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import java.util.UUID
 
 @Serializable
 private data class StompAgentEvent(
@@ -54,6 +60,7 @@ class ChatViewModel(
     private val authRepository: AuthRepository,
     private val stompClient: StompWebSocketClient,
     private val diagnosticsRepository: buzz.delena.agentportal.core.diagnostics.DiagnosticsRepository,
+    private val connectivityObserver: ConnectivityObserver,
     private val appContext: Context,
     private val onArchived: () -> Unit = {},
 ) : ViewModel() {
@@ -68,11 +75,20 @@ class ChatViewModel(
 
     private var streamingMessageId: String? = null
     private val streamingBuffer = StringBuilder()
+    private val optimisticPrompts = linkedMapOf<String, ChatMessageItem>()
 
     init {
         viewModelScope.launch {
-            sessionRepository.observeMessages(sessionId).collect { entities ->
-                val roomItems = entities.map { it.toItem() }
+            combine(
+                sessionRepository.observeMessages(sessionId),
+                sessionRepository.observePendingPrompts(sessionId),
+            ) { messages, pending -> messages to pending }
+                .collect { (entities, pending) ->
+                val pendingIds = pending.mapTo(mutableSetOf()) { "pending-${it.id}" }
+                optimisticPrompts.keys.removeAll(pendingIds)
+                val roomItems = entities.map { it.toItem() } +
+                    pending.map { it.toItem() } +
+                    optimisticPrompts.values
                 val streamingId = streamingMessageId
                 val merged = if (streamingId != null && streamingBuffer.isNotEmpty()) {
                     val withoutStaleStream = roomItems.filterNot { it.id == streamingId }
@@ -87,6 +103,11 @@ class ChatViewModel(
                 }
                 _state.value = _state.value.copy(messages = merged)
                 refreshActivity(messages = merged)
+            }
+        }
+        viewModelScope.launch {
+            connectivityObserver.isConnected.collect { connected ->
+                if (connected) sessionRepository.flushPendingPrompts(sessionId)
             }
         }
         refresh()
@@ -205,21 +226,49 @@ class ChatViewModel(
         val prompt = _state.value.promptDraft
         if (prompt.isBlank() || _state.value.isSending) return
 
-        _state.value = _state.value.copy(isSending = true, promptDraft = "", error = null)
+        val pendingId = UUID.randomUUID().toString()
+        val localItem = ChatMessageItem(
+            id = "pending-$pendingId",
+            isUser = true,
+            contentMarkdown = prompt,
+            timeLabel = "now",
+            deliveryStatus = MessageDeliveryStatus.QUEUED,
+        )
+        optimisticPrompts[localItem.id] = localItem
+        _state.value = _state.value.copy(
+            isSending = true,
+            promptDraft = "",
+            error = null,
+            messages = _state.value.messages + localItem,
+        )
         viewModelScope.launch {
-            sessionRepository.sendPrompt(sessionId, prompt)
-                .onSuccess {
+            sessionRepository.enqueuePendingPrompt(sessionId, prompt, pendingId)
+            when (val outcome = sessionRepository.attemptPendingPrompt(pendingId)) {
+                PromptSendOutcome.Sent -> {
+                    optimisticPrompts.remove(localItem.id)
                     _state.value = _state.value.copy(isSending = false)
                     refreshActivity()
                     refreshPermissions()
                 }
-                .onFailure { t ->
+                PromptSendOutcome.Queued -> {
+                    _state.value = _state.value.copy(isSending = false)
+                }
+                is PromptSendOutcome.Failed -> {
+                    optimisticPrompts.remove(localItem.id)
                     _state.value = _state.value.copy(
                         isSending = false,
                         promptDraft = prompt,
-                        error = userFacingErrorMessage(t),
+                        messages = _state.value.messages.filterNot { it.id == localItem.id },
+                        error = userFacingErrorMessage(outcome.cause),
                     )
                 }
+            }
+        }
+    }
+
+    fun retryPendingPrompt(id: String) {
+        viewModelScope.launch {
+            sessionRepository.retryPendingPrompt(id)
         }
     }
 
@@ -514,6 +563,18 @@ class ChatViewModel(
         timeLabel = createdAt,
     )
 
+    private fun PendingPromptEntity.toItem() = ChatMessageItem(
+        id = "pending-$id",
+        isUser = true,
+        contentMarkdown = content,
+        timeLabel = "now",
+        deliveryStatus = when (status) {
+            PendingPromptEntity.STATUS_SENDING -> MessageDeliveryStatus.SENDING
+            PendingPromptEntity.STATUS_FAILED -> MessageDeliveryStatus.FAILED
+            else -> MessageDeliveryStatus.QUEUED
+        },
+    )
+
     private fun FileChangeDto.toItem(): FileChangeItem {
         val (added, removed) = countDiffLines(unifiedDiff)
         return FileChangeItem(
@@ -532,6 +593,7 @@ class ChatViewModel(
         private val authRepository: AuthRepository,
         private val stompClient: StompWebSocketClient,
         private val diagnosticsRepository: buzz.delena.agentportal.core.diagnostics.DiagnosticsRepository,
+        private val connectivityObserver: ConnectivityObserver,
         private val appContext: Context,
         private val onArchived: () -> Unit = {},
     ) : ViewModelProvider.Factory {
@@ -544,6 +606,7 @@ class ChatViewModel(
                 authRepository,
                 stompClient,
                 diagnosticsRepository,
+                connectivityObserver,
                 appContext,
                 onArchived,
             ) as T

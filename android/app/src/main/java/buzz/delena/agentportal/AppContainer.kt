@@ -4,9 +4,11 @@ import android.content.Context
 import buzz.delena.agentportal.core.data.AuthRepository
 import buzz.delena.agentportal.core.data.SessionRepository
 import buzz.delena.agentportal.core.data.TokenStore
+import buzz.delena.agentportal.core.data.WorkspacePreferences
 import buzz.delena.agentportal.core.data.local.AppDatabase
 import buzz.delena.agentportal.core.diagnostics.DiagnosticsRepository
 import buzz.delena.agentportal.core.network.NetworkModule
+import buzz.delena.agentportal.core.network.ConnectivityObserver
 import buzz.delena.agentportal.core.network.StompWebSocketClient
 
 /**
@@ -18,15 +20,22 @@ import buzz.delena.agentportal.core.network.StompWebSocketClient
 class AppContainer(context: Context) {
 
     val tokenStore = TokenStore(context)
+    val workspacePreferences = WorkspacePreferences(context)
 
     private val agentPortalApi = NetworkModule.provideAgentPortalApi(tokenStore)
     private val authApi = NetworkModule.provideAuthApi()
     val deviceApi = NetworkModule.provideDeviceApi(tokenStore)
 
     private val database = AppDatabase.getInstance(context)
+    val connectivityObserver = ConnectivityObserver(context)
 
     val authRepository = AuthRepository(agentPortalApi, authApi, tokenStore)
-    val sessionRepository = SessionRepository(agentPortalApi, database.sessionDao(), database.messageDao())
+    val sessionRepository = SessionRepository(
+        agentPortalApi,
+        database.sessionDao(),
+        database.messageDao(),
+        database.pendingPromptDao(),
+    )
     val diagnosticsRepository = DiagnosticsRepository(context.applicationContext, agentPortalApi)
 
     // Separate OkHttp client for WS: infinite read timeout + protocol pings.

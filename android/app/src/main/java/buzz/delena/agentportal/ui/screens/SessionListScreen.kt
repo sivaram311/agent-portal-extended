@@ -24,6 +24,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -71,6 +72,7 @@ data class SessionListUiState(
     val diagnosticsMessage: String? = null,
     val error: String? = null,
     val connectionStatus: ConnectionStatusUi? = null,
+    val recentWorkspaces: List<String> = emptyList(),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,7 +80,7 @@ data class SessionListUiState(
 fun SessionListScreen(
     state: SessionListUiState,
     onSessionClick: (String) -> Unit,
-    onCreateSession: (provider: String) -> Unit,
+    onCreateSession: (workspacePath: String, provider: String) -> Unit,
     onFilterChange: (SessionListFilter) -> Unit,
     onRefresh: () -> Unit,
     onDismissError: () -> Unit,
@@ -214,8 +216,9 @@ fun SessionListScreen(
         ) {
             CreateSessionSheet(
                 isCreating = state.isCreating,
-                onCreate = { provider ->
-                    onCreateSession(provider)
+                recentWorkspaces = state.recentWorkspaces,
+                onCreate = { workspacePath, provider ->
+                    onCreateSession(workspacePath, provider)
                     showCreateSheet = false
                 },
                 onCancel = { showCreateSheet = false },
@@ -277,10 +280,17 @@ private fun FilterRow(
 @Composable
 private fun CreateSessionSheet(
     isCreating: Boolean,
-    onCreate: (provider: String) -> Unit,
+    recentWorkspaces: List<String>,
+    onCreate: (workspacePath: String, provider: String) -> Unit,
     onCancel: () -> Unit,
 ) {
     var provider by remember { mutableStateOf("cursor") }
+    var selectedWorkspace by remember { mutableStateOf("demo") }
+    var customPath by remember { mutableStateOf("") }
+    var showCustomPath by remember { mutableStateOf(false) }
+    val workspaceOptions = remember(recentWorkspaces) {
+        (listOf("demo") + recentWorkspaces).distinct()
+    }
 
     Column(
         modifier = Modifier
@@ -296,7 +306,7 @@ private fun CreateSessionSheet(
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            text = "Thin create — workspace defaults to demo. Full picker comes later.",
+            text = "Choose a workspace and provider.",
             style = MaterialTheme.typography.bodyMedium,
             color = ApColors.TextMuted,
         )
@@ -328,14 +338,53 @@ private fun CreateSessionSheet(
         }
 
         Text(
-            text = "Workspace: demo",
-            style = MaterialTheme.typography.bodyMedium,
-            color = ApColors.TextPrimary,
+            text = "Workspace",
+            style = MaterialTheme.typography.labelLarge,
+            color = ApColors.TextMuted,
         )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            workspaceOptions.forEach { workspace ->
+                FilterChip(
+                    selected = selectedWorkspace == workspace,
+                    onClick = {
+                        selectedWorkspace = workspace
+                        customPath = ""
+                    },
+                    label = { Text(workspace, maxLines = 1) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = ApColors.Accent.copy(alpha = 0.22f),
+                        selectedLabelColor = ApColors.Accent,
+                    ),
+                )
+            }
+        }
+        TextButton(onClick = { showCustomPath = !showCustomPath }) {
+            Text(
+                text = if (showCustomPath) "Hide custom path" else "Enter another path",
+                color = ApColors.Accent,
+            )
+        }
+        if (showCustomPath) {
+            OutlinedTextField(
+                value = customPath,
+                onValueChange = {
+                    customPath = it
+                    selectedWorkspace = it.trim()
+                },
+                label = { Text("Workspace path") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
 
         Button(
-            onClick = { onCreate(provider) },
-            enabled = !isCreating,
+            onClick = { onCreate(selectedWorkspace.trim(), provider) },
+            enabled = !isCreating && selectedWorkspace.isNotBlank(),
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
                 containerColor = ApColors.Accent,
@@ -400,7 +449,7 @@ private fun SessionListScreenPreview() {
         SessionListScreen(
             state = SessionListUiState(sessions = previewSessions),
             onSessionClick = {},
-            onCreateSession = {},
+            onCreateSession = { _, _ -> },
             onFilterChange = {},
             onRefresh = {},
             onDismissError = {},

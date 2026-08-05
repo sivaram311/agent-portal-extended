@@ -93,15 +93,16 @@ fun AgentPortalNavHost(
                     container.authRepository,
                     container.stompClient,
                     container.diagnosticsRepository,
+                    container.workspacePreferences,
                 ),
             )
             val state by viewModel.state.collectAsState()
             SessionListScreen(
                 state = state,
                 onSessionClick = { sessionId -> navController.navigate(Routes.chat(sessionId)) },
-                onCreateSession = { provider ->
+                onCreateSession = { workspacePath, provider ->
                     viewModel.createSession(
-                        workspacePath = "demo",
+                        workspacePath = workspacePath,
                         title = null,
                         provider = provider,
                         onCreated = { sessionId -> navController.navigate(Routes.chat(sessionId)) },
@@ -129,6 +130,7 @@ fun AgentPortalNavHost(
                     authRepository = container.authRepository,
                     stompClient = container.stompClient,
                     diagnosticsRepository = container.diagnosticsRepository,
+                    connectivityObserver = container.connectivityObserver,
                     appContext = LocalContext.current.applicationContext,
                     onArchived = {
                         navController.popBackStack(Routes.SESSION_LIST, inclusive = false)
@@ -140,6 +142,7 @@ fun AgentPortalNavHost(
                 state = state,
                 onPromptChange = viewModel::onPromptChange,
                 onSendPrompt = viewModel::sendPrompt,
+                onRetryPrompt = viewModel::retryPendingPrompt,
                 onOpenDecisionSheet = viewModel::openDecisionSheet,
                 onDismissSheet = viewModel::dismissSheet,
                 onOpenToolsSheet = viewModel::openToolsSheet,

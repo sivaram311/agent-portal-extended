@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import buzz.delena.agentportal.core.data.AuthRepository
 import buzz.delena.agentportal.core.data.SessionRepository
+import buzz.delena.agentportal.core.data.WorkspacePreferences
 import buzz.delena.agentportal.core.data.local.SessionEntity
 import buzz.delena.agentportal.core.network.StompWebSocketClient
 import buzz.delena.agentportal.core.network.userFacingErrorMessage
@@ -34,6 +35,7 @@ class SessionListViewModel(
     private val authRepository: AuthRepository,
     private val stompClient: StompWebSocketClient,
     private val diagnosticsRepository: buzz.delena.agentportal.core.diagnostics.DiagnosticsRepository,
+    private val workspacePreferences: WorkspacePreferences,
 ) : ViewModel() {
 
     private val filter = MutableStateFlow(SessionListFilter.ALL)
@@ -80,7 +82,8 @@ class SessionListViewModel(
         sessionRepository.observeSessions(),
         flags,
         connectionStatus,
-    ) { entities, f, connection ->
+        workspacePreferences.recentWorkspaces,
+    ) { entities, f, connection, recentWorkspaces ->
         SessionListUiState(
             sessions = entities
                 .filter { matches(it.status, f.filter) }
@@ -94,6 +97,7 @@ class SessionListViewModel(
             diagnosticsMessage = f.diagnosticsMessage,
             error = f.error,
             connectionStatus = connection,
+            recentWorkspaces = recentWorkspaces,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -187,7 +191,10 @@ class SessionListViewModel(
             creating.value = true
             error.value = null
             sessionRepository.createSession(workspacePath, title, provider)
-                .onSuccess { onCreated(it.id) }
+                .onSuccess {
+                    workspacePreferences.recordWorkspace(workspacePath)
+                    onCreated(it.id)
+                }
                 .onFailure { error.value = userFacingErrorMessage(it) }
             creating.value = false
         }
@@ -214,6 +221,7 @@ class SessionListViewModel(
         private val authRepository: AuthRepository,
         private val stompClient: StompWebSocketClient,
         private val diagnosticsRepository: buzz.delena.agentportal.core.diagnostics.DiagnosticsRepository,
+        private val workspacePreferences: WorkspacePreferences,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -222,6 +230,7 @@ class SessionListViewModel(
                 authRepository,
                 stompClient,
                 diagnosticsRepository,
+                workspacePreferences,
             ) as T
         }
     }

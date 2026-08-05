@@ -2,6 +2,7 @@ package buzz.delena.agentportal.ui.components
 
 import android.widget.TextView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,12 +32,20 @@ import io.noties.markwon.syntax.Prism4jThemeDarkula
 import io.noties.prism4j.GrammarLocator
 import io.noties.prism4j.Prism4j
 
+enum class MessageDeliveryStatus(val label: String) {
+    QUEUED("Queued"),
+    SENDING("Sending…"),
+    FAILED("Failed – tap to retry"),
+}
+
 /** One chat message row: user bubbles are plain text and right-aligned; assistant bubbles render markdown/code and are left-aligned. */
 @Composable
 fun MessageBubble(
     isUser: Boolean,
     contentMarkdown: String,
     timeLabel: String,
+    deliveryStatus: MessageDeliveryStatus? = null,
+    onRetry: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val bubbleColor = if (isUser) ApColors.AccentSoft else ApColors.Surface
@@ -63,10 +72,18 @@ fun MessageBubble(
             }
         }
         Text(
-            text = timeLabel,
-            color = ApColors.TextMuted,
+            text = deliveryStatus?.label ?: timeLabel,
+            color = if (deliveryStatus == MessageDeliveryStatus.FAILED) ApColors.Danger else ApColors.TextMuted,
             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),
-            modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp),
+            modifier = Modifier
+                .padding(top = 2.dp, start = 4.dp, end = 4.dp)
+                .then(
+                    if (deliveryStatus == MessageDeliveryStatus.FAILED) {
+                        Modifier.clickable(onClick = onRetry)
+                    } else {
+                        Modifier
+                    },
+                ),
         )
     }
 }

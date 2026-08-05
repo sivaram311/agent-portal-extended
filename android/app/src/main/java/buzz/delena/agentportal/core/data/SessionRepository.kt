@@ -2,6 +2,8 @@ package buzz.delena.agentportal.core.data
 
 import buzz.delena.agentportal.core.data.local.MessageDao
 import buzz.delena.agentportal.core.data.local.MessageEntity
+import buzz.delena.agentportal.core.data.local.PendingPromptDao
+import buzz.delena.agentportal.core.data.local.PendingPromptEntity
 import buzz.delena.agentportal.core.data.local.SessionDao
 import buzz.delena.agentportal.core.data.local.SessionEntity
 import buzz.delena.agentportal.core.network.AgentPortalApi
@@ -14,7 +16,12 @@ import buzz.delena.agentportal.core.network.dto.PermissionDto
 import buzz.delena.agentportal.core.network.dto.PromptRequest
 import buzz.delena.agentportal.core.network.dto.SessionDto
 import buzz.delena.agentportal.core.network.dto.ToolRunDto
+import java.io.IOException
+import java.util.UUID
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import retrofit2.HttpException
 
 /**
  * Session/message data source: Room is the read model for instant
@@ -25,7 +32,9 @@ class SessionRepository(
     private val api: AgentPortalApi,
     private val sessionDao: SessionDao,
     private val messageDao: MessageDao,
+    private val pendingPromptDao: PendingPromptDao,
 ) {
+    private val pendingPromptMutex = Mutex()
 
     fun observeSessions(): Flow<List<SessionEntity>> = sessionDao.observeSessions()
 
@@ -60,6 +69,9 @@ class SessionRepository(
     fun observeMessages(sessionId: String): Flow<List<MessageEntity>> =
         messageDao.observeMessages(sessionId)
 
+    fun observePendingPrompts(sessionId: String): Flow<List<PendingPromptEntity>> =
+        pendingPromptDao.observePending(sessionId)
+
     suspend fun refreshMessages(sessionId: String) {
         val messages = api.getMessages(sessionId)
         messageDao.upsertAll(messages.map { it.toEntity() })
@@ -73,6 +85,85 @@ class SessionRepository(
         } catch (t: Throwable) {
             Result.failure(t)
         }
+    }
+
+    suspend fun enqueuePendingPrompt(
+        sessionId: String,
+        content: String,
+        id: String = UUID.randomUUID().toString(),
+    ): PendingPromptEntity {
+        val pending = PendingPromptEntity(
+            id = id,
+            sessionId = sessionId,
+            content = content,
+            createdAt = System.currentTimeMillis(),
+        )
+        pendingPromptDao.insert(pending)
+        return pending
+    }
+
+    suspend fun attemptPendingPrompt(id: String): PromptSendOutcome = pendingPromptMutex.withLock {
+        val pending = pendingPromptDao.getById(id) ?: return@withLock PromptSendOutcome.Sent
+        pendingPromptDao.updateStatus(
+            id = pending.id,
+            status = PendingPromptEntity.STATUS_SENDING,
+            retryCount = pending.retryCount,
+        )
+        try {
+            val message = api.sendPrompt(pending.sessionId, PromptRequest(pending.content))
+            messageDao.upsert(message.toEntity())
+            pendingPromptDao.deleteById(pending.id)
+            PromptSendOutcome.Sent
+        } catch (t: Throwable) {
+            if (t.isRecoverablePromptFailure()) {
+                pendingPromptDao.updateStatus(
+                    id = pending.id,
+                    status = PendingPromptEntity.STATUS_PENDING,
+                    retryCount = pending.retryCount,
+                )
+                PromptSendOutcome.Queued
+            } else {
+                pendingPromptDao.deleteById(pending.id)
+                PromptSendOutcome.Failed(t)
+            }
+        }
+    }
+
+    suspend fun flushPendingPrompts(sessionId: String) = pendingPromptMutex.withLock {
+        pendingPromptDao.getAllPending()
+            .filter {
+                it.sessionId == sessionId && it.status != PendingPromptEntity.STATUS_FAILED
+            }
+            .forEach { pending ->
+                pendingPromptDao.updateStatus(
+                    id = pending.id,
+                    status = PendingPromptEntity.STATUS_SENDING,
+                    retryCount = pending.retryCount,
+                )
+                try {
+                    val message = api.sendPrompt(pending.sessionId, PromptRequest(pending.content))
+                    messageDao.upsert(message.toEntity())
+                    pendingPromptDao.deleteById(pending.id)
+                } catch (_: Throwable) {
+                    val nextRetryCount = pending.retryCount + 1
+                    pendingPromptDao.updateStatus(
+                        id = pending.id,
+                        status = if (nextRetryCount >= MAX_PENDING_RETRIES) {
+                            PendingPromptEntity.STATUS_FAILED
+                        } else {
+                            PendingPromptEntity.STATUS_PENDING
+                        },
+                        retryCount = nextRetryCount,
+                    )
+                    return@withLock
+                }
+            }
+    }
+
+    suspend fun retryPendingPrompt(id: String) {
+        val pending = pendingPromptDao.getById(id) ?: return
+        pendingPromptDao.updateStatus(id, PendingPromptEntity.STATUS_PENDING, retryCount = 0)
+        flushPendingPrompts(pending.sessionId)
     }
 
     suspend fun getPendingPermissions(sessionId: String): Result<List<PermissionDto>> {
@@ -198,4 +289,17 @@ class SessionRepository(
         sequenceNo = sequenceNo,
         createdAt = createdAt,
     )
+
+    private companion object {
+        const val MAX_PENDING_RETRIES = 5
+    }
 }
+
+sealed interface PromptSendOutcome {
+    data object Sent : PromptSendOutcome
+    data object Queued : PromptSendOutcome
+    data class Failed(val cause: Throwable) : PromptSendOutcome
+}
+
+private fun Throwable.isRecoverablePromptFailure(): Boolean =
+    this is IOException || (this is HttpException && code() in 500..599)
