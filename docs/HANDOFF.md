@@ -8,7 +8,7 @@
 | Field | Value |
 |-------|-------|
 | versionName | `1.1.0` · versionCode **20** |
-| APK | `foreman-1.1.0-debug.apk` — published as the `v1.1.0` GitHub release asset, since `*.apk` is gitignored |
+| APK | `foreman-1.1.0-debug.apk` — ships as the `v1.1.0` GitHub release asset, since `*.apk` is gitignored |
 | APK SHA-256 | `C44555A42620519754B02FEF50391936C7CC80AAB9B2021F5C59B4DB39777C89` |
 
 ## v1.1.0 — Offline prompt queue + workspace picker
@@ -17,7 +17,9 @@
 down. Every prompt is written to a new Room table (`pending_prompts`, AppDatabase v2, destructive
 fallback) before the request goes out, so the bubble renders immediately as `Queued` and survives a
 process restart. `SessionRepository` classifies the failure: `IOException` or 5xx keeps the row
-queued, anything else (4xx, parse errors) deletes it and surfaces the existing error banner.
+queued. Anything else (4xx, parse errors) is permanent — on the user's own send it drops the row and
+surfaces the existing error banner, while during a background flush it parks the row as `FAILED` so
+the text is not lost from under them.
 A `ConnectivityObserver` (`ConnectivityManager.NetworkCallback`, waits for `NET_CAPABILITY_VALIDATED`)
 flushes the session's queue FIFO on reconnect; a shared mutex keeps that flush from racing the
 in-flight direct send. Five failed attempts mark the row `FAILED`, which renders as
